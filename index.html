@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alltoy24's RNG</title>
+    <title>웹 RNG 시뮬레이터: Masterpiece (Final Fix)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Noto+Sans+KR:wght@300;500;700&family=Rajdhani:wght@600&display=swap');
 
@@ -169,7 +169,7 @@
         debugger;
         var end = +new Date(); 
         if(isNaN(start) || isNaN(end) || end - start > allow) {
-            // document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s"
+            document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s"
         }
     }
     if(window.attachEvent) {
@@ -719,7 +719,7 @@
             playSound(sfxClick);
             let idx = inventory.findIndex(a => a.name === name);
             if (idx > -1) {
-                fragments += Math.max(1, Math.ceil(inventory[idx].chanceX / 100));
+                fragments += Math.max(1, Math.ceil(inventory[idx].chanceX / 10));
                 inventory.splice(idx, 1); saveGame();
             }
         };
@@ -1345,20 +1345,30 @@
             createWeatherParticles(); 
         }
 
-        // [행운 스탯 반영 RNG 엔진]
+        // [수정] 순차적 독립 시행(Sequential Roll) 방식으로 변경
         function getRollResult() {
+            // 1. 현재 날씨 등 조건에 맞는 오라만 필터링
             let available = allAuras.filter(a => a.condition === "all" || a.condition === currentWeather.id);
-            if (!available.length) available = allAuras;
             
-            let totalWeight = available.reduce((sum, a) => sum + (1 / Math.max(1, a.chanceX / globalLuckMultiplier)), 0);
-            let randomNum = Math.random() * totalWeight;
+            // 2. 오라를 희귀도 순(chanceX가 높은 순)으로 정렬
+            // 가장 희귀한 것부터 주사위를 굴려야 상위 등급 당첨 기회를 먼저 가집니다.
+            available.sort((a, b) => b.chanceX - a.chanceX);
 
+            // 3. 가장 희귀한 오라부터 순차적으로 당첨 확인
             for (let aura of available) {
-                let weight = 1 / Math.max(1, aura.chanceX / globalLuckMultiplier);
-                if (randomNum < weight) return aura;
-                randomNum -= weight;
+                // 행운 적용: 실질 확률 분모 계산 (최소값 1 보장)
+                let adjustedChance = Math.max(1, aura.chanceX / globalLuckMultiplier);
+                
+                // 0 ~ adjustedChance 사이의 난수를 생성하여 1보다 작으면 당첨
+                // 예: adjustedChance가 10이면 1/10 확률로 당첨
+                if (Math.random() * adjustedChance < 1) {
+                    return aura;
+                }
             }
-            return available[0];
+
+            // 4. 만약 위의 루프에서 아무것도 당첨되지 않았다면 (수학적으로 희박하지만 방어적 코드)
+            // 가장 흔한 오라(기존 리스트의 첫 번째인 COMMON 등)를 반환합니다.
+            return allAuras.find(a => a.name === "COMMON") || available[available.length - 1];
         }
 
         function applyAuraStyle(aura) {
@@ -1425,7 +1435,7 @@
 
         document.getElementById("btn-discard").addEventListener("click", () => {
             playSound(sfxClick);
-            fragments += Math.max(1, Math.ceil(currentResult.chanceX / 100));
+            fragments += Math.max(1, Math.ceil(currentResult.chanceX / 10));
             saveGame();
             resetRollState();
         });
