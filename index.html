@@ -2171,7 +2171,7 @@
         }
 
         function render() { 
-            gameTimeMinutes += 0.1;
+            gameTimeMinutes += 0.025;
             if (gameTimeMinutes >= 24 * 60) gameTimeMinutes -= 24 * 60; 
             let preciseHour = gameTimeMinutes / 60; 
             hours = Math.floor(preciseHour);
