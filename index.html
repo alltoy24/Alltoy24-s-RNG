@@ -710,7 +710,7 @@
                             <span class="inv-odds">x${count}</span>
                         </div>
                         <div style="font-size:0.75rem; color:#888;">확률 1/${aura.chanceX.toLocaleString()}</div>
-                        <button class="action-sm-btn btn-scrap" onclick="scrapAura('${name}')" style="pointer-events:auto; z-index:100;">분해 (+${Math.max(1, Math.ceil(aura.chanceX/100))}✨)</button>
+                        <button class="action-sm-btn btn-scrap" onclick="scrapAura('${name}')" style="pointer-events:auto; z-index:100;">분해 (+${Math.max(1, Math.ceil(aura.chanceX/4))}✨)</button>
                     </div>`;
             });
         }
@@ -719,7 +719,7 @@
             playSound(sfxClick);
             let idx = inventory.findIndex(a => a.name === name);
             if (idx > -1) {
-                fragments += Math.max(1, Math.ceil(inventory[idx].chanceX / 10));
+                fragments += Math.max(1, Math.ceil(inventory[idx].chanceX / 4));
                 inventory.splice(idx, 1); saveGame();
             }
         };
@@ -1435,7 +1435,7 @@
 
         document.getElementById("btn-discard").addEventListener("click", () => {
             playSound(sfxClick);
-            fragments += Math.max(1, Math.ceil(currentResult.chanceX / 10));
+            fragments += Math.max(1, Math.ceil(currentResult.chanceX / 4));
             saveGame();
             resetRollState();
         });
