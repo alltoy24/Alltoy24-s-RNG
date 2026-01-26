@@ -622,35 +622,43 @@
         // ★ [멀티플레이] 닉네임 설정 및 저장
         // ==========================================
         let myNickname = localStorage.getItem('ultimate_rng_nickname');
-        if (!myNickname) {
-            myNickname = prompt("✨ 멀티플레이에서 사용할 닉네임을 입력해주세요!", "방랑자_" + Math.floor(Math.random()*999));
-            if (!myNickname || myNickname.trim() === "") myNickname = "익명의 유저";
+        if (!myNickname || myNickname === "null") { // null 문자열 방어
+            myNickname = prompt("✨ 닉네임을 입력해주세요!", "방랑자_" + Math.floor(Math.random()*999));
+            if (!myNickname) myNickname = "익명의_방랑자";
             localStorage.setItem('ultimate_rng_nickname', myNickname);
         }
         const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`; // 내 채팅 색상
 
-        // 2. 엔터키 또는 전송 버튼으로 채팅 보내기
+        // [수정] 채팅 전송 함수
         function sendChatMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
 
-            socket.emit('sendMessage', { nickname: myNickname, text: text, color: myChatColor });
-            chatInput.value = ""; // 입력창 비우기
+            // [변경] nickname 대신 sender라는 이름으로 보냅니다.
+            socket.emit('sendMessage', { 
+                sender: myNickname, // nickname -> sender
+                text: text, 
+                color: myChatColor 
+            });
+            chatInput.value = ""; 
         }
 
         chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
         document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
 
-        // 3. 서버에서 온 채팅 받아서 화면에 띄우기
+        // [수정] 서버에서 온 채팅 받기
         socket.on('receiveMessage', (data) => {
             const msgDiv = document.createElement("div");
-            // 닉네임은 고유 색상으로, 내용은 흰색으로 출력
-            msgDiv.innerHTML = `<b style="color:${data.color};">[${data.sender}]</b> ${data.text}`;
+            
+            // 데이터 검증: sender가 없으면 '익명의 유저'로 표시
+            const displayName = data.sender || "익명의 유저";
+            const displayColor = data.color || "#FFF";
+
+            msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
             chatHistory.appendChild(msgDiv);
             
-            // 채팅이 너무 많아지면 맨 위 메시지 삭제 (최대 50줄)
+            // 자동 스크롤 및 개수 제한
             if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
-            // 자동 스크롤 (맨 아래로)
             chatHistory.scrollTop = chatHistory.scrollHeight; 
         });
 
