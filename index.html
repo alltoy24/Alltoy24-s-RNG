@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>웹 RNG 시뮬레이터: Ultimate Gimmick Update</title>
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
@@ -16,29 +16,27 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
-        /* ★ [수정] 모바일 화면 고정 및 터치 액션 제어 */
+        /* [수정 2] 모바일 전체화면 강제 고정 (dvh 단위 사용) */
         html, body {
-            width: 100vw; 
-            height: 100vh; 
-            overflow: hidden;       /* 스크롤바 숨김 */
+            width: 100%;
+            height: 100%;        /* 구형 브라우저 호환 */
+            height: 100dvh;      /* ★ 핵심: 주소창 제외한 실제 화면 높이 */
+            overflow: hidden;    /* 스크롤바 숨김 */
             background: #000; 
-            color: white; 
+            color: white;
             
-            /* ★ 핵심: 모바일 터치 동작(스크롤, 줌 등)을 브라우저가 처리하지 않게 막음 */
+            /* 모바일 터치/확대 방지 */
             touch-action: none;
-            
-            /* iOS 사파리에서 위아래로 튕기는 현상(Rubber-banding) 방지 */
             overscroll-behavior: none;
-            
-            /* 텍스트 선택 방지 */
             user-select: none;
             -webkit-user-select: none;
             
-            /* 모바일 키보드 올라올 때 레이아웃 깨짐 방지용 */
+            /* 위치 고정 */
             position: fixed; 
-            top: 0; left: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             font-family: 'Noto Sans KR', sans-serif;
             cursor: crosshair;
+            z-index: 0;
         }
 
         /* ★ [기믹 1] 피버 타임 테두리 효과 */
@@ -336,6 +334,36 @@
             transition: left 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             pointer-events: auto !important;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        /* [신규] 채팅 알림 레드 닷 (버튼 우상단에 빨간 점) */
+        #chat-toggle-btn.has-notification::after {
+            content: "";
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 10px;
+            height: 10px;
+            background-color: #FF003C; /* 강렬한 빨강 */
+            border: 2px solid #fff;    /* 흰색 테두리로 구분감 */
+            border-radius: 50%;        /* 동그라미 */
+            box-shadow: 0 0 8px #FF003C; /* 붉은 빛 */
+            z-index: 102;
+            animation: modalFadeIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 뿅! 하고 나타남 */
+        }
+
+        /* [신규] 귀여운 씰룩씰룩 애니메이션 (앞뒤로 회전) */
+        @keyframes cuteWiggle {
+            0% { transform: rotate(0deg) scale(1); }
+            20% { transform: rotate(-8deg) scale(1.05); } /* 살짝 커지며 왼쪽 */
+            40% { transform: rotate(8deg) scale(1.05); }  /* 살짝 커지며 오른쪽 */
+            60% { transform: rotate(-4deg) scale(1.05); }
+            80% { transform: rotate(4deg) scale(1.05); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+
+        /* 애니메이션 적용 클래스 */
+        .wiggle {
+            animation: cuteWiggle 0.5s ease-in-out;
         }
         /* [수정] 설정창 내부 스크롤 적용 */
         .settings-body {
@@ -713,6 +741,8 @@
         // 2. [핵심 수정] 전역 변수 최상단 선언 (에러 방지용)
         let W = window.innerWidth; 
         let H = window.innerHeight;
+        // ★ [핵심 수정] 모바일 감지 변수를 '전역'으로 뺍니다. (어디서든 접근 가능하게)
+        const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const TWO_PI = Math.PI * 2;
         // ==========================================
         // ★ [멀티플레이] 서버 연결 및 데이터 관리
@@ -2084,6 +2114,23 @@
 
             msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
             chatHistory.appendChild(msgDiv);
+
+            // ★ [여기 추가] 채팅창이 닫혀있으면 알림 띄우기!
+            const chatContainer = document.getElementById("chat-container");
+            const btn = document.getElementById("chat-toggle-btn");
+
+            if (!chatContainer.classList.contains("open")) {
+                // 1. 빨간 점 켜기
+                btn.classList.add("has-notification");
+                
+                // 2. 씰룩 애니메이션 (재생을 위해 클래스 뺐다 다시 넣기 트릭)
+                btn.classList.remove("wiggle");
+                void btn.offsetWidth; // 강제 리플로우 (애니메이션 리셋용)
+                btn.classList.add("wiggle");
+                
+                // 3. 띵~ 소리 (선택사항, 클릭음 재활용)
+                playSound(sfxClick); 
+            }
             
             // 자동 스크롤 및 개수 제한
             if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
@@ -3732,36 +3779,28 @@
             btn.innerText = bar.classList.contains("open") ? "▼ CLOSE" : "▲ ROLL";
         }
 
-        // 💡 [수정] UI 가시성 조절 함수 (UI 증발 버그 수정판)
+        // 💡 [수정] UI 가시성 조절 함수 (UI 증발 및 먹통 방지)
         function setUIVisibility(visible) {
             const uiElements = [
-                'top-ui', 
-                'quick-item-toggle', 
-                'quick-item-bar', 
-                'combo-display', 
-                'buff-display', 
-                'roll-bottom-bar', 
-                'roll-bottom-toggle',
-                'chat-container',
-                'chat-toggle-btn',
-                'mobile-controls'
+                'top-ui', 'quick-item-toggle', 'quick-item-bar', 'combo-display', 'buff-display', 
+                'roll-bottom-bar', 'roll-bottom-toggle', 'chat-container', 'chat-toggle-btn', 'mobile-controls'
             ];
             
             uiElements.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
+                    // 모바일 컨트롤러는 데스크탑에서 굳이 켤 필요 없음
+                    if (id === 'mobile-controls' && !IS_MOBILE) return;
+
                     if (visible) {
                         el.classList.remove('ui-hidden');
                         el.style.visibility = "visible"; 
-                        el.style.opacity = "1"; // ★ 강제 복구
-                        el.style.pointerEvents = "auto"; // ★ 터치/클릭 복구
+                        el.style.opacity = "1"; // ★ 강제로 불투명하게 만듦 (핵심)
+                        el.style.pointerEvents = "auto"; // ★ 터치 가능하게 복구
                         
-                        // 하단 바 위치 리셋 (CSS 클래스 .open에 맡김)
-                        if (id === 'roll-bottom-bar') {
-                            el.style.bottom = ""; 
-                        }
-                    }
-                    else {
+                        // 하단 바 위치 리셋 (CSS 클래스에 맡김)
+                        if (id === 'roll-bottom-bar') el.style.bottom = ""; 
+                    } else {
                         el.classList.add('ui-hidden');
                     }
                 }
@@ -4910,6 +4949,12 @@
             
             chat.classList.toggle("open");
             btn.classList.toggle("open");
+
+            // ★ [여기 추가] 열었으니까 알림(빨간 점, 흔들림) 끄기
+            if (chat.classList.contains("open")) {
+                btn.classList.remove("has-notification");
+                btn.classList.remove("wiggle");
+            }
             
             // 버튼 텍스트 변경
             btn.innerText = chat.classList.contains("open") ? "◀ CLOSE" : "💬 CHAT";
@@ -6320,72 +6365,34 @@
         };
 
         window.onload = () => { 
-            // [1] 모바일 감지 함수
-            function checkMobile() {
-                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            }
-            const IS_MOBILE = checkMobile();
-
-            // [2] 모바일이면 강제로 '감자 모드(최저사양)' 적용
+            // 1. 모바일이면 강제로 '감자 모드(최저사양)' 적용
             if (IS_MOBILE) {
-                console.log("📱 모바일 환경 감지: 초고성능 모드 활성화");
+                console.log("📱 모바일 환경 감지: 최적화 & 컨트롤러 활성화");
                 
-                // 그래픽 설정 강제 하향
-                GRAPHICS.weatherDensity = 0.2;     // 날씨 입자 20%만 표시
-                GRAPHICS.showGrass = false;        // 풀 끄기 (렉 주범)
-                GRAPHICS.showClouds = false;       // 구름 끄기
-                GRAPHICS.showOtherAttacks = false; // 남의 공격 안 보임 (중요)
-                GRAPHICS.showFireflies = false;    // 반딧불이 끄기
-                GRAPHICS.fancyGraphics = false;    // 배경 그라데이션 등 끄기
+                // 그래픽 설정 강제 하향 (렉 방지)
+                GRAPHICS.weatherDensity = 0.2;      
+                GRAPHICS.showGrass = false;        
+                GRAPHICS.showClouds = false;       
+                GRAPHICS.showOtherAttacks = false; 
+                GRAPHICS.showFireflies = false;    
+                GRAPHICS.fancyGraphics = false;    
                 
-                // ★ 핵심: 모든 간소화 옵션 켜기
-                GRAPHICS.simpleProjectiles = true; // 투사체 단순화
-                GRAPHICS.simpleAuras = true;       // 오라 단순화
-                GRAPHICS.simpleMobs = true;        // 몹 단순화
+                GRAPHICS.simpleProjectiles = true; 
+                GRAPHICS.simpleAuras = true;       
+                GRAPHICS.simpleMobs = true;        
                 
-                // 렌더링 해상도 낮추기 (픽셀은 좀 튀지만 성능 대폭 향상)
-                const dpr = window.devicePixelRatio || 1;
-                // 모바일은 해상도를 1.0으로 고정 (Retina 디스플레이 부하 방지)
+                // 해상도 고정
                 canvas.width = W; canvas.height = H;
                 vfxCanvas.width = W; vfxCanvas.height = H;
-            }
-            loadGame(); 
 
-            // 💡 [수정] 첫 시작은 무조건 '맑음'으로 고정
-            currentWeather = weathers.find(w => w.id === "clear");
-
-            // UI 및 텍스트 즉시 반영
-            document.getElementById("weather-display").innerText = currentWeather.name;
-
-            // BGM 및 환경음 소스 세팅 (재생은 클릭 후)
-            bgmPlayer.src = currentWeather.music;
-            weatherSfxPlayer.src = currentWeather.sfx;
-
-            // 맑음 날씨에 맞게 파티클 효과 끄기
-            targetFog = 0; targetSnow = 0; targetParticleCount = 0;
-            calcBuffs();
-
-            // 첫 클릭 시 BGM과 자연의 소리(새소리) 재생 시작
-            document.body.addEventListener('click', () => { 
-                if (bgmPlayer.paused) { 
-                    bgmPlayer.play().catch(e=>{});
-                    weatherSfxPlayer.play().catch(e=>{});
-                } 
-            }, { once: true });
-            
-            // ==========================================
-            // ★ [수정] 모바일 감지 및 컨트롤러 활성화 (이동만)
-            // ==========================================
-            function isMobileDevice() {
-                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            }
-
-            if (isMobileDevice()) {
-                console.log("📱 모바일 환경 감지됨: 이동 조이콘 활성화");
+                // ★ 모바일 컨트롤러 UI 켜기
                 const mControls = document.getElementById("mobile-controls");
-                if (mControls) mControls.style.display = "flex";
+                if (mControls) {
+                    mControls.style.display = "flex"; // CSS의 none을 덮어씀
+                    mControls.classList.remove("ui-hidden");
+                }
 
-                // --- 1. 이동 버튼 (왼쪽) 로직만 유지 ---
+                // 모바일 터치 이벤트 연결
                 const btnLeft = document.getElementById("btn-left");
                 const btnRight = document.getElementById("btn-right");
 
@@ -6394,14 +6401,36 @@
                     if (dir === 'right') keys.right = isPressed;
                 };
 
-                // 왼쪽 버튼
-                btnLeft.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('left', true); });
-                btnLeft.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('left', false); });
-
-                // 오른쪽 버튼
-                btnRight.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('right', true); });
-                btnRight.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('right', false); });
+                if(btnLeft) {
+                    btnLeft.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('left', true); });
+                    btnLeft.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('left', false); });
+                }
+                if(btnRight) {
+                    btnRight.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('right', true); });
+                    btnRight.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('right', false); });
+                }
             }
+
+            loadGame(); 
+
+            // 날씨 및 오디오 초기화
+            currentWeather = weathers.find(w => w.id === "clear");
+            document.getElementById("weather-display").innerText = currentWeather.name;
+            bgmPlayer.src = currentWeather.music;
+            weatherSfxPlayer.src = currentWeather.sfx;
+            targetFog = 0; targetSnow = 0; targetParticleCount = 0;
+            calcBuffs();
+
+            // 첫 클릭 시 오디오 재생 허용
+            document.body.addEventListener('click', () => { 
+                if (bgmPlayer.paused) { 
+                    bgmPlayer.play().catch(e=>{});
+                    weatherSfxPlayer.play().catch(e=>{});
+                } 
+            }, { once: true });
+
+            // ★ [수정 3] 여기에 추가하세요! (강제 리사이즈 실행)
+            window.dispatchEvent(new Event('resize'));
         };
 
     </script>
