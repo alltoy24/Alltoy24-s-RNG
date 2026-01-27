@@ -690,81 +690,6 @@
         const chatHistory = document.getElementById("chat-history");
         const chatInput = document.getElementById("chat-input");
 
-        // 1. 랜덤 닉네임 & 고유 색상 생성기 (로그인 없이 개성 부여)
-        const adjectives = ["신비한", "초월적인", "운좋은", "기묘한", "침착한", "광기어린"];
-        const nouns = ["별조각", "도깨비불", "블랙홀", "은하수", "운석", "마법사"];
-        // ==========================================
-        // ★ [멀티플레이] 닉네임 설정 및 저장
-        // ==========================================
-        let myNickname = localStorage.getItem('ultimate_rng_nickname');
-        if (!myNickname || myNickname === "null") { // null 문자열 방어
-            myNickname = prompt("✨ 닉네임을 입력해주세요!", "방랑자_" + Math.floor(Math.random()*999));
-            if (!myNickname) myNickname = "익명의_방랑자";
-            localStorage.setItem('ultimate_rng_nickname', myNickname);
-        }
-        const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`; // 내 채팅 색상
-
-        // [수정] 채팅 전송 함수
-        function sendChatMessage() {
-            const text = chatInput.value.trim();
-            if (!text) return;
-
-            // [변경] nickname 대신 sender라는 이름으로 보냅니다.
-            socket.emit('sendMessage', { 
-                sender: myNickname, // nickname -> sender
-                text: text, 
-                color: myChatColor 
-            });
-            chatInput.value = ""; 
-        }
-
-        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
-        document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
-
-        // [수정] 서버에서 온 채팅 받기
-        socket.on('receiveMessage', (data) => {
-            const msgDiv = document.createElement("div");
-            
-            // 데이터 검증: sender가 없으면 '익명의 유저'로 표시
-            const displayName = data.sender || "익명의 유저";
-            const displayColor = data.color || "#FFF";
-
-            msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
-            chatHistory.appendChild(msgDiv);
-            
-            // 자동 스크롤 및 개수 제한
-            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
-            chatHistory.scrollTop = chatHistory.scrollHeight; 
-        });
-
-        socket.on('systemMessage', (data) => {
-            playSound(sfxSuccess); 
-            const msgDiv = document.createElement("div");
-            msgDiv.style.background = "rgba(0, 0, 0, 0.4)";
-            msgDiv.style.borderLeft = `4px solid ${data.color}`;
-            msgDiv.style.padding = "8px";
-            msgDiv.style.marginTop = "5px";
-            msgDiv.style.borderRadius = "4px";
-            msgDiv.style.animation = "modalFadeIn 0.3s forwards";
-
-            msgDiv.innerHTML = `🌟 <b style="color:#FFF;">${data.nickname}</b>님이 ` +
-                            `<span style="color:${data.color}; text-shadow:${data.glow}; font-family:'Cinzel', serif; font-size:1.1em; font-weight:bold;">[ ${data.auraName} ]</span>` +
-                            ` <span style="color:#aaa; font-size:0.8em;">(1 / ${data.chanceX.toLocaleString()})</span> 을(를) 획득했습니다! 🎉`;
-            
-            chatHistory.appendChild(msgDiv);
-            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
-            chatHistory.scrollTop = chatHistory.scrollHeight; 
-        });
-
-        // 시작할 때 시스템 안내 메시지
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                const sysMsg = document.createElement("div");
-                sysMsg.innerHTML = `<span style="color:#FFD700;">[SYSTEM] 당신의 닉네임은 '${myNickname}' 입니다. 서버에 연결되었습니다!</span>`;
-                chatHistory.appendChild(sysMsg);
-            }, 500);
-        });
-
         // ========================================================
         // ★ [멀티플레이] 다른 유저를 그리는 함수 (머플러 제외, 최적화 버전)
         // ========================================================
@@ -1884,6 +1809,100 @@
 
             saveGame(); // 변경 사항 저장
         }
+
+        // ==========================================
+        // ★ [멀티플레이] 유저 세션 및 중복 접속 방지
+        // ==========================================
+
+        // 1. 고유 유저 ID (신분증) 생성 및 로드
+        let myUserId = localStorage.getItem('ultimate_rng_user_id');
+        if (!myUserId) {
+            myUserId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now();
+            localStorage.setItem('ultimate_rng_user_id', myUserId);
+        }
+
+        // 2. 닉네임 로드 및 설정 (null 방어)
+        let myNickname = localStorage.getItem('ultimate_rng_nickname');
+        if (!myNickname || myNickname === "null") {
+            myNickname = prompt("✨ 닉네임을 입력해주세요!", "방랑자_" + Math.floor(Math.random()*999)) || "익명의_방랑자";
+            localStorage.setItem('ultimate_rng_nickname', myNickname);
+        }
+
+        // 3. 채팅 색상 및 UI 참조
+        const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`;
+
+        // 4. 서버에 입장 정보 전송 (아이디 + 닉네임 + 현재 오라)
+        socket.emit('joinGame', {
+            userId: myUserId,
+            nickname: myNickname,
+            aura: equippedAuraName || "COMMON"
+        });
+
+        // 5. 중복 접속(새 탭) 시 현재 페이지 쫓아내기
+        socket.on('kickDuplicate', () => {
+            alert("⚠️ 다른 탭에서 이미 게임이 실행 중입니다! (중복 접속 방지)");
+            window.location.href = "about:blank"; 
+        });
+        // [수정] 채팅 전송 함수
+        function sendChatMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            // [변경] nickname 대신 sender라는 이름으로 보냅니다.
+            socket.emit('sendMessage', { 
+                sender: myNickname, // nickname -> sender
+                text: text, 
+                color: myChatColor 
+            });
+            chatInput.value = ""; 
+        }
+
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+        document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
+
+        // [수정] 서버에서 온 채팅 받기
+        socket.on('receiveMessage', (data) => {
+            const msgDiv = document.createElement("div");
+            
+            // 데이터 검증: sender가 없으면 '익명의 유저'로 표시
+            const displayName = data.sender || "익명의 유저";
+            const displayColor = data.color || "#FFF";
+
+            msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
+            chatHistory.appendChild(msgDiv);
+            
+            // 자동 스크롤 및 개수 제한
+            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
+            chatHistory.scrollTop = chatHistory.scrollHeight; 
+        });
+
+        socket.on('systemMessage', (data) => {
+            playSound(sfxSuccess); 
+            const msgDiv = document.createElement("div");
+            msgDiv.style.background = "rgba(0, 0, 0, 0.4)";
+            msgDiv.style.borderLeft = `4px solid ${data.color}`;
+            msgDiv.style.padding = "8px";
+            msgDiv.style.marginTop = "5px";
+            msgDiv.style.borderRadius = "4px";
+            msgDiv.style.animation = "modalFadeIn 0.3s forwards";
+
+            msgDiv.innerHTML = `🌟 <b style="color:#FFF;">${data.nickname}</b>님이 ` +
+                            `<span style="color:${data.color}; text-shadow:${data.glow}; font-family:'Cinzel', serif; font-size:1.1em; font-weight:bold;">[ ${data.auraName} ]</span>` +
+                            ` <span style="color:#aaa; font-size:0.8em;">(1 / ${data.chanceX.toLocaleString()})</span> 을(를) 획득했습니다! 🎉`;
+            
+            chatHistory.appendChild(msgDiv);
+            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
+            chatHistory.scrollTop = chatHistory.scrollHeight; 
+        });
+
+        // 시작할 때 시스템 안내 메시지
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const sysMsg = document.createElement("div");
+                sysMsg.innerHTML = `<span style="color:#FFD700;">[SYSTEM] 당신의 닉네임은 '${myNickname}' 입니다. 서버에 연결되었습니다!</span>`;
+                chatHistory.appendChild(sysMsg);
+            }, 500);
+        });
 
         function saveGame() { 
             try { 
