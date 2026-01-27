@@ -344,6 +344,49 @@
             background: #FF416C; border: none; color: white; padding: 0 15px; margin-left: 5px;
             border-radius: 5px; cursor: pointer; font-weight: bold;
         }
+
+        /* ★ [신규] 모바일 컨트롤러 스타일 */
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px; left: 0; width: 100%; height: 160px;
+            pointer-events: none; /* 빈 공간 터치 통과 */
+            z-index: 9999;
+            padding: 0 30px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex; gap: 15px;
+            pointer-events: auto; /* 버튼만 터치 가능 */
+        }
+
+        .touch-btn {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            color: white; font-size: 24px; font-weight: bold;
+            display: flex; justify-content: center; align-items: center;
+            user-select: none; -webkit-user-select: none;
+            touch-action: manipulation; /* 확대/스크롤 방지 */
+            transition: transform 0.1s, background 0.1s;
+        }ㅇ
+
+        .touch-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.9);
+        }
+
+        /* 액션 버튼 특수 스타일 */
+        .action-main { width: 80px; height: 80px; border-color: #FF416C; background: rgba(255, 65, 108, 0.2); font-size: 30px; margin-bottom: 20px; }
+        .action-sub { width: 60px; height: 60px; border-color: #00E5FF; background: rgba(0, 229, 255, 0.2); align-self: center; }
+
+        /* 모바일이 아닐 땐 숨기기 위한 클래스 */
+        .desktop-only { display: none !important; }
     </style>
     <script>
     // !function() { function detectDevTool(allow) { if(isNaN(+allow)) allow = 100; var start = +new Date(); debugger; var end = +new Date(); if(isNaN(start) || isNaN(end) || end - start > allow) { document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s" } } if(window.attachEvent) { if (document.readyState === "complete" || document.readyState === "interactive") { detectDevTool(); window.attachEvent('onresize', detectDevTool); window.attachEvent('onmousemove', detectDevTool); window.attachEvent('onfocus', detectDevTool); window.attachEvent('onblur', detectDevTool); } else { setTimeout(argument.callee, 0); } } else { window.addEventListener('load', detectDevTool); window.addEventListener('resize', detectDevTool); window.addEventListener('mousemove', detectDevTool); window.addEventListener('focus', detectDevTool); window.addEventListener('blur', detectDevTool); } }();
@@ -502,6 +545,19 @@
                 </div>
             </div> 
         </div>
+
+        <div id="mobile-controls" style="display: none;">
+            <div class="control-group left">
+                <button id="btn-left" class="touch-btn">◀</button>
+                <button id="btn-right" class="touch-btn">▶</button>
+            </div>
+
+            <div class="control-group right">
+                <button id="btn-action-roll" class="touch-btn action-sub">🎲</button>
+                <button id="btn-action-atk" class="touch-btn action-main">⚔️</button>
+            </div>
+        </div>
+
     </div>
 
 
@@ -530,12 +586,6 @@
         // 3. 다른 유저가 나갔을 때
         socket.on('playerLeft', (id) => {
             delete otherPlayers[id];
-        });
-
-        // ★ [신규] 중복 접속 시 서버가 보낸 거절 신호 처리
-        socket.on('forceDisconnect', (msg) => {
-            alert(msg); // "이미 다른 탭에서 실행 중입니다" 경고
-            window.location.href = "about:blank"; // 강제 퇴장
         });
 
         // ★ [멀티플레이 최적화] 상대방 공격 시작점 위치 보정 및 에러 해결
@@ -1866,23 +1916,20 @@
         chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
         document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
 
-        // 채팅 수신 (스크롤 확실하게 처리)
+        // [수정] 서버에서 온 채팅 받기
         socket.on('receiveMessage', (data) => {
             const msgDiv = document.createElement("div");
             
-            // 닉네임 색상 적용
-            msgDiv.innerHTML = `<b style="color:${data.color || '#FFF'};">[${data.sender || '익명'}]</b> <span style="color:#ddd;">${data.text}</span>`;
-            
-            const ch = document.getElementById("chat-history");
-            if(ch) { 
-                ch.appendChild(msgDiv); 
-                
-                // ★ 메시지 개수가 너무 많으면(100개) 위에서부터 지워서 렉 방지
-                if (ch.children.length > 100) ch.removeChild(ch.firstChild);
+            // 데이터 검증: sender가 없으면 '익명의 유저'로 표시
+            const displayName = data.sender || "익명의 유저";
+            const displayColor = data.color || "#FFF";
 
-                // ★ 스크롤을 맨 아래로 강제 이동
-                ch.scrollTop = ch.scrollHeight; 
-            }
+            msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
+            chatHistory.appendChild(msgDiv);
+            
+            // 자동 스크롤 및 개수 제한
+            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
+            chatHistory.scrollTop = chatHistory.scrollHeight; 
         });
 
         socket.on('systemMessage', (data) => {
@@ -3507,18 +3554,36 @@
             btn.innerText = bar.classList.contains("open") ? "▼ CLOSE" : "▲ ROLL";
         }
 
-        // 💡 [신규] UI 가시성을 조절하는 함수
+        // 💡 [수정] UI 가시성 조절 함수 (인라인 스타일 강제 고정 버그 수정)
         function setUIVisibility(visible) {
             const uiElements = [
-                'top-ui', 'quick-item-toggle', 'quick-item-bar', 
-                'combo-display', 'buff-display', 'control-area'
+                'top-ui', 
+                'quick-item-toggle', 
+                'quick-item-bar', 
+                'combo-display', 
+                'buff-display', 
+                'roll-bottom-bar', 
+                'roll-bottom-toggle',
+                'chat-container',
+                'chat-toggle-btn',
+                'mobile-controls'
             ];
             
             uiElements.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    if (visible) el.classList.remove('ui-hidden');
-                    else el.classList.add('ui-hidden');
+                    if (visible) {
+                        el.classList.remove('ui-hidden');
+                        
+                        // ★ [수정 포인트] 강제로 bottom="0"을 박아버리던 코드를 삭제하고,
+                        // 인라인 스타일을 비워서 다시 CSS 클래스(.open)의 말을 듣게 합니다.
+                        if (id === 'roll-bottom-bar') {
+                            el.style.bottom = ""; 
+                        }
+                    }
+                    else {
+                        el.classList.add('ui-hidden');
+                    }
                 }
             });
         }
@@ -5843,7 +5908,12 @@
         // 1. 결과 표시 함수 (자동/수동 통합)
         // ========================================================
         function showFinalResult() { 
+            // ★ UI 전체 다시 보이기 (하단 바 포함)
             setUIVisibility(true);
+            
+            // ★ 텍스트 투명도 100% 복구 (혹시 꺼져있을 수 있으니 강제 적용)
+            document.getElementById("stage").style.opacity = 1;
+
             restoreBGMWithImpact();
             applyAuraStyle(currentResult); 
             document.getElementById("odds-text").style.display = "block"; 
@@ -6094,7 +6164,66 @@
                     bgmPlayer.play().catch(e=>{});
                     weatherSfxPlayer.play().catch(e=>{});
                 } 
-            }, { once: true }); 
+            }, { once: true });
+            
+            // ==========================================
+            // ★ [신규] 모바일 감지 및 컨트롤러 활성화 로직
+            // ==========================================
+            function isMobileDevice() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            }
+
+            if (isMobileDevice()) {
+                console.log("📱 모바일 환경 감지됨: 조이콘 활성화");
+                const mControls = document.getElementById("mobile-controls");
+                if (mControls) mControls.style.display = "flex";
+
+                // --- 1. 이동 버튼 (왼쪽) ---
+                const btnLeft = document.getElementById("btn-left");
+                const btnRight = document.getElementById("btn-right");
+
+                // 터치 시작/끝 이벤트 연결 (멀티터치 지원)
+                const handleMove = (dir, isPressed) => {
+                    if (dir === 'left') keys.left = isPressed;
+                    if (dir === 'right') keys.right = isPressed;
+                };
+
+                // 왼쪽 버튼
+                btnLeft.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('left', true); });
+                btnLeft.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('left', false); });
+
+                // 오른쪽 버튼
+                btnRight.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('right', true); });
+                btnRight.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('right', false); });
+
+                // --- 2. 액션 버튼 (오른쪽) ---
+                const btnAtk = document.getElementById("btn-action-atk");
+                const btnRoll = document.getElementById("btn-action-roll");
+
+                // 공격 버튼 (공격은 마우스 좌표가 없으므로 정면으로 발사)
+                btnAtk.addEventListener("touchstart", (e) => {
+                    e.preventDefault();
+                    // 내 캐릭터 위치 기준, 바라보는 방향으로 약간 앞쪽을 클릭한 것으로 처리
+                    let aimX = player.x + (player.facingRight ? 200 : -200);
+                    let aimY = player.y - 100; // 허리 높이
+                    
+                    // 화면 좌표로 변환하여 공격 함수 호출
+                    // (원래는 마우스 화면 좌표를 받지만, 여기선 월드 좌표를 역산해서 넘기거나 로직 수정 필요)
+                    // triggerAttack 함수가 화면 좌표(clientX)를 받도록 되어있으므로,
+                    // 간단하게 로직 내부에서 처리하도록 가짜 이벤트를 만듭니다.
+                    
+                    // ★ 모바일 전용 공격 로직: 그냥 바라보는 방향으로 쏨
+                    let screenX = aimX - cameraX;
+                    let screenY = aimY - currentParallaxY * 50; 
+                    triggerAttack(screenX, screenY); 
+                });
+
+                // 롤(뽑기) 버튼 -> 오토 롤 토글로 매핑하거나 그냥 롤 버튼 클릭
+                btnRoll.addEventListener("touchstart", (e) => {
+                    e.preventDefault();
+                    startRoll(); // 가챠 굴리기
+                });
+            }
         };
 
     </script>
