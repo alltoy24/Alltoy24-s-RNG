@@ -19,7 +19,7 @@
         /* ★ [수정] 모바일 화면 고정 및 터치 액션 제어 */
         html, body {
             width: 100vw; 
-            height: 100vh; 
+            height: 100dvh; /* ★ 주소창이 있든 없든 꽉 차게 맞춤 */
             overflow: hidden;       /* 스크롤바 숨김 */
             background: #000; 
             color: white; 
@@ -6210,7 +6210,12 @@
                 if (bgmPlayer.paused) { 
                     bgmPlayer.play().catch(e=>{});
                     weatherSfxPlayer.play().catch(e=>{});
-                } 
+                }
+                // 2. ★ 전체 화면 요청 (모바일 주소창 제거)
+                const doc = document.documentElement;
+                if (doc.requestFullscreen) doc.requestFullscreen();
+                else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen(); // iOS/Safari
+                else if (doc.msRequestFullscreen) doc.msRequestFullscreen();
             }, { once: true });
             
             // ==========================================
