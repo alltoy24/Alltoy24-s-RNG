@@ -53,10 +53,47 @@
             mix-blend-mode: overlay; 
             transition: opacity 0.05s ease-out; 
         }
-        #weather-notification { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.8s ease-in-out; z-index: 20; }
-        #weather-notification.show { opacity: 1; animation: popUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        #weather-notif-title { font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; color: #aaa; letter-spacing: 5px; margin-bottom: 5px; text-transform: uppercase;}
-        #weather-notif-name { font-family: 'Cinzel', serif; font-size: 4.5rem; font-weight: 700; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.8); letter-spacing: 12px; }
+        /* ★ [수정] 왼쪽 사이드바 알림 (슬라이드 애니메이션) */
+        #notification-bar {
+            position: absolute;
+            top: 120px; /* 상단에서 약간 아래 */
+            left: 0;
+            transform: translateX(-120%); /* 평소엔 화면 왼쪽 밖으로 숨김 */
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); /* 부드러운 스르륵 효과 */
+            z-index: 90;
+            
+            background: rgba(10, 10, 15, 0.85); /* 반투명 검정 */
+            backdrop-filter: blur(10px);
+            border-right: 3px solid #FFD700; /* 오른쪽 포인트 컬러 */
+            border-radius: 0 12px 12px 0;
+            padding: 15px 40px 15px 25px;
+            box-shadow: 5px 5px 20px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        
+        #notification-bar.show {
+            transform: translateX(0); /* 화면 안으로 등장 */
+        }
+
+        #notif-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.9rem;
+            color: #aaa;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        #notif-content {
+            font-family: 'Cinzel', serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            white-space: nowrap;
+        }
+        
+        /* 기존 중앙 팝업 CSS는 삭제하거나 무시됨 */
         @keyframes popUp { from { transform: translate(-50%, -40%); } to { transform: translate(-50%, -50%); } }
 
         .glass-panel { background: var(--ui-bg); backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%); border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25), inset 0 0 10px rgba(255,255,255,0.05); color: white; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
@@ -318,9 +355,10 @@
     <canvas id="game-canvas"></canvas>
     <canvas id="vfx-canvas"></canvas>
     <div id="fog-overlay"></div>
-    <div id="glitch-overlay"></div> <div id="weather-notification">
-        <div id="weather-notif-title">Weather Changed</div>
-        <div id="weather-notif-name">RAIN</div>
+    <div id="glitch-overlay"></div>
+    <div id="notification-bar">
+        <div id="notif-label">SYSTEM MESSAGE</div>
+        <div id="notif-content">WELCOME</div>
     </div>
     <div id="lightning-flash"></div>
 
@@ -459,6 +497,7 @@
                         <label><input type="checkbox" id="chk-aura" onchange="updateGraphicSetting('simpleAuras', this.checked)"> 오라 간소화</label>
                         <label><input type="checkbox" id="chk-mob" onchange="updateGraphicSetting('simpleMobs', this.checked)"> 몹 간소화</label>
                         <label><input type="checkbox" id="chk-fireflies" checked onchange="updateGraphicSetting('showFireflies', this.checked)"> 반딧불이</label>
+                        <label><input type="checkbox" id="chk-fancy" checked onchange="updateGraphicSetting('fancyGraphics', this.checked)"> 화려한 그래픽</label>
                     </div>
                 </div>
             </div> 
@@ -467,6 +506,9 @@
 
 
     <script>
+        // 2. [핵심 수정] 전역 변수 최상단 선언 (에러 방지용)
+        let W = window.innerWidth; 
+        let H = window.innerHeight;
         const TWO_PI = Math.PI * 2;
         // ==========================================
         // ★ [멀티플레이] 서버 연결 및 데이터 관리
@@ -581,42 +623,54 @@
             gameTimeMinutes = serverTimeMinutes;
         });
 
-        // 💡 [수정] 혼자 날씨를 뽑지 않고, 서버에서 준 날씨를 화면에 적용만 하는 함수
+        // 💡 [수정] 날씨 적용 함수 (에러 수정판)
         function applyNewWeather(newWeather) {
             currentWeather = newWeather;
 
-            // UI 텍스트 및 효과 적용
+            // 1. [삭제됨] 예전 중앙 팝업 텍스트 갱신 코드 제거
+            // document.getElementById("weather-display").innerText = ... (삭제)
+            // document.getElementById("weather-notif-name").innerText = ... (삭제)
+
+            // 2. [신규] 사이드바 알림 호출
             if(currentWeather.id === "glitch") {
-                document.getElementById("weather-display").innerHTML = `<span class="glitch-text">V̵O̵I̵D̵</span>`;
-                document.getElementById("weather-notif-name").innerHTML = `<span class="glitch-text">W̴E̵A̷T̵H̷E̵R̷: V̴O̷I̸D̴</span>`;
+                showSideNotification("WEATHER ANOMALY", "<span class='glitch-text'>V̵O̵I̵D̵</span>", "#ff003c");
             } else {
-                document.getElementById("weather-display").innerText = currentWeather.name;
-                document.getElementById("weather-notif-name").innerText = currentWeather.id.toUpperCase();
+                showSideNotification("WEATHER CHANGED", currentWeather.name, "#FFD700");
+            }
+            
+            // 3. 상단 작은 날씨 정보창 업데이트 (이건 남아있어야 함)
+            // 만약 top-ui 안에 있는 작은 날씨 표시도 지우셨다면 이 부분도 에러가 날 수 있습니다.
+            // 혹시 모르니 안전장치(if)를 추가합니다.
+            const topWeatherDisplay = document.getElementById("weather-display");
+            if (topWeatherDisplay) {
+                if(currentWeather.id === "glitch") topWeatherDisplay.innerHTML = `<span class="glitch-text">V̵O̵I̵D̵</span>`;
+                else topWeatherDisplay.innerText = currentWeather.name;
             }
 
-            // 날씨 변경 팝업 알림
-            const notif = document.getElementById("weather-notification");
-            notif.classList.add("show");
-            setTimeout(() => notif.classList.remove("show"), 3500);
-
-            // BGM 및 환경음(새소리/빗소리) 크로스페이드
+            // 4. 사운드 및 효과 (기존 유지)
             bgmPlayer.src = currentWeather.music || "bgms/cloudy.mp3";
             smoothAudioTransition(currentWeather.music, currentWeather.sfx);
-            if (currentWeather.sfx) weatherSfxPlayer.play().catch(e=>{});
-            else { weatherSfxPlayer.pause(); weatherSfxPlayer.currentTime = 0; }
             
-            calcBuffs(); // 날씨 버프 재계산
+            if (currentWeather.sfx) {
+                weatherSfxPlayer.src = currentWeather.sfx;
+                weatherSfxPlayer.play().catch(e=>{});
+            } else {
+                weatherSfxPlayer.pause();
+                weatherSfxPlayer.currentTime = 0;
+            }
+            
+            calcBuffs(); 
 
-            // 파티클 목표치 설정
+            // 5. 파티클 목표치 설정 (기존 유지)
             targetFog = (currentWeather.id === "foggy") ? 1.0 : 0.0;
             targetSnow = (currentWeather.id === "snow") ? 1.0 : 0.0;
             
             const pCounts = { "thunder": 1500, "rain": 800, "snow": 600, "wind": 100, "foggy": 15, "glitch": 1000 };
-            // ★ 수정됨: 기본 개수에 사용자 설정을 곱함
             let baseCount = pCounts[currentWeather.id] || 0;
-            targetParticleCount = baseCount * GRAPHICS.weatherDensity;
+            // GRAPHICS 객체가 없어서 에러날 경우를 대비해 기본값 1.0 처리
+            let density = (typeof GRAPHICS !== 'undefined') ? GRAPHICS.weatherDensity : 1.0;
+            targetParticleCount = baseCount * density;
         }
-
         // ★ [월드 동기화] 2. 날씨 동기화 (비, 눈, 브금 자동 변화)
         socket.on('weatherChanged', (newWeatherId) => {
             // 이미 같은 날씨면 무시
@@ -745,90 +799,92 @@
             let time = globalRenderTime * 0.015;
 
             // ========================================================
-            // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (간소화 적용) ---
+            // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (최적화 + 디자인 유지) ---
             // ========================================================
             let aura = allAuras.find(a => a.name === pData.aura);
             if (aura) {
-                // ★ [간소화 모드 ON] - 성능 최적화
+                // ★ [간소화 모드 ON] - 성능 최적화 (기존 동일)
                 if (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleAuras) {
                     ctx.save();
-                    // 위치를 캐릭터 등 뒤 중앙으로 조정
                     ctx.translate(0, -50); 
                     
-                    // 1. 단순한 반투명 원 (후광)
-                    ctx.globalAlpha = 0.2;
-                    ctx.fillStyle = aura.color;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 45, 0, TWO_PI);
-                    ctx.fill();
+                    ctx.globalAlpha = 0.2; ctx.fillStyle = aura.color; 
+                    ctx.beginPath(); ctx.arc(0, 0, 45, 0, TWO_PI); ctx.fill();
 
-                    // 2. 외곽선 (등급 색상 강조)
-                    ctx.globalAlpha = 0.8;
-                    ctx.strokeStyle = aura.color;
-                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.8; ctx.strokeStyle = aura.color; ctx.lineWidth = 2; 
                     ctx.stroke();
 
-                    // 3. 고등급(100만 이상)일 경우 왕관 아이콘 표시로 차별화
                     if (aura.chanceX >= 1000000) {
-                        ctx.fillStyle = "#FFF";
-                        ctx.font = "20px serif";
-                        ctx.textAlign = "center";
-                        ctx.fillText("👑", 0, -55);
+                        ctx.fillStyle = "#FFF"; ctx.font = "20px serif"; 
+                        ctx.textAlign = "center"; ctx.fillText("👑", 0, -55);
                     }
-
                     ctx.restore();
                 } 
-                // ★ [간소화 모드 OFF] - 기존의 화려한 이펙트 유지
+                // ★ [간소화 모드 OFF] - 화려함 유지 + 렉 제거 버전
                 else {
                     ctx.save();
+                    // [핵심 최적화] 그림자 대신 빛 혼합 모드 사용 (훨씬 빠름)
                     ctx.globalCompositeOperation = 'lighter'; 
+                    
                     let chance = aura.chanceX;
                     let [r, g, b] = hexToRgb(aura.color);
-                    // 다른 유저는 전역 time 변수 사용
+                    let time = globalRenderTime * 0.015;
                     const applyGroundPerspective = () => ctx.scale(1, 0.35);
+
+                    // 공통 바닥 발광 (ShadowBlur 대체용 가짜 광원)
+                    ctx.save(); applyGroundPerspective();
+                    let baseGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 60);
+                    baseGlow.addColorStop(0, `rgba(${r},${g},${b}, 0.4)`); // 중심부 빛
+                    baseGlow.addColorStop(1, "transparent");
+                    ctx.fillStyle = baseGlow; 
+                    ctx.beginPath(); ctx.arc(0, 0, 60, 0, TWO_PI); ctx.fill();
+                    ctx.restore();
 
                     // [티어 1] Common ~ Rare
                     if (chance < 1000) {
-                        ctx.save(); applyGroundPerspective();
-                        let glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 40);
-                        glowGrad.addColorStop(0, `rgba(${r},${g},${b}, 0.5)`);
-                        glowGrad.addColorStop(1, "transparent");
-                        ctx.fillStyle = glowGrad; ctx.beginPath(); ctx.arc(0, 0, 40, 0, TWO_PI); ctx.fill();
-                        ctx.restore();
-
-                        ctx.fillStyle = aura.color; ctx.shadowBlur = 5; ctx.shadowColor = aura.color;
+                        ctx.fillStyle = aura.color; 
+                        // 그림자 제거 -> 대신 투명도 조절로 느낌 유지
                         for(let i=0; i<3; i++) {
                             let pTime = (time + i * 2) % 6; 
                             ctx.globalAlpha = Math.max(0, 1 - (pTime / 6));
-                            ctx.beginPath(); ctx.arc(Math.sin(time + i) * 15, -pTime * 15, 1.5, 0, TWO_PI); ctx.fill();
+                            ctx.beginPath(); ctx.arc(Math.sin(time + i) * 15, -pTime * 15, 2, 0, TWO_PI); ctx.fill();
                         }
                     }
                     // [티어 2] Epic ~ Legend
                     else if (chance < 1000000) {
-                        ctx.shadowBlur = 20; ctx.shadowColor = aura.color;
                         ctx.save(); applyGroundPerspective();
+                        // 쉐도우 블러 제거, 라인 두께 조절로 발광 느낌
                         drawMagicCircle(ctx, 0, 0, 50, time, aura.color, 0.5);
                         ctx.restore();
+                        
+                        ctx.lineWidth = 2;
                         for(let i=0; i<3; i++) {
                             let angle = time * 2 + (TWO_PI/3)*i;
                             let px = Math.cos(angle) * 35; let py = -40 + Math.sin(angle) * 15;
-                            ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 2;
+                            
+                            // 잔상 (그림자 대신 옅은 선)
+                            ctx.strokeStyle = `rgba(${r},${g},${b}, 0.3)`; 
                             ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(Math.cos(angle-0.2)*35, -40 + Math.sin(angle-0.2)*15); ctx.stroke();
+                            
+                            // 별
                             ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
+                            // 별 주변 가짜 광원
+                            ctx.fillStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.beginPath(); ctx.arc(px, py, 6, 0, TWO_PI); ctx.fill();
                         }
                     }
                     // [티어 3] Mythic ~ God
                     else if (chance < 100000000) {
-                        ctx.shadowBlur = 40; ctx.shadowColor = aura.color;
                         ctx.save(); applyGroundPerspective(); 
                         drawMagicCircle(ctx, 0, 0, 75, time, aura.color, 0.6);
                         drawMagicCircle(ctx, 0, 0, 110, -time*1.5, "#fff", 0.4);
+                        
                         let pulse = Math.sin(time*3)*15;
-                        ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 3;
+                        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`; ctx.lineWidth = 3;
                         ctx.beginPath(); ctx.arc(0, 0, 130 + pulse, 0, TWO_PI); ctx.stroke();
                         ctx.restore();
 
                         ctx.save(); ctx.translate(0, -60); ctx.rotate(time * 0.5);
+                        // 그라데이션 콘 (이건 원래 빨라서 유지)
                         for(let i=0; i<16; i++) {
                             ctx.rotate(TWO_PI/16);
                             let grad = ctx.createLinearGradient(0, 0, 0, -110);
@@ -838,7 +894,8 @@
                         }
                         ctx.restore();
 
-                        ctx.strokeStyle = "#fff"; ctx.lineWidth = 1;
+                        // 회전하는 사각형들
+                        ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
                         for(let i=0; i<6; i++) {
                             let angle = time + (TWO_PI/6)*i;
                             let px = Math.cos(angle) * (50 + Math.sin(time*2+i)*10);
@@ -849,13 +906,14 @@
                     }
                     // [티어 4] Transcendent
                     else if (chance < 1000000000) {
-                        ctx.shadowBlur = 60; ctx.shadowColor = aura.color;
+                        // 바닥진
                         ctx.save(); applyGroundPerspective(); ctx.rotate(time*0.2);
-                        ctx.strokeStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.lineWidth = 2;
+                        ctx.strokeStyle = `rgba(${r},${g},${b}, 0.6)`; ctx.lineWidth = 2;
                         for(let i=0; i<6; i++) { ctx.rotate(Math.PI/3); ctx.beginPath(); ctx.moveTo(80,0); ctx.lineTo(150, 0); ctx.lineTo(120, 60); ctx.closePath(); ctx.stroke(); }
                         drawMagicCircle(ctx, 0, 0, 100, -time, "#fff", 0.6);
                         ctx.restore();
 
+                        // 회전하는 검 (그라데이션 유지)
                         ctx.save(); ctx.translate(0, -70);
                         for(let i=0; i<5; i++) {
                             let angle = time + (TWO_PI/5)*i;
@@ -865,17 +923,24 @@
                             swordGrad.addColorStop(0, "#fff"); swordGrad.addColorStop(1, aura.color);
                             ctx.fillStyle = swordGrad;
                             ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(5, 0); ctx.lineTo(0, 40); ctx.lineTo(-5, 0); ctx.fill();
+                            
+                            // 검 주변 빛 (그림자 대신 원 그리기)
+                            ctx.globalAlpha = 0.3; ctx.fillStyle = aura.color; 
+                            ctx.beginPath(); ctx.arc(0, 0, 15, 0, TWO_PI); ctx.fill();
                             ctx.restore();
                         }
                         ctx.restore();
 
+                        // 날개 (그라데이션 자체가 예뻐서 그림자 없어도 됨)
                         let flow = Math.sin(time * 1.5);
                         for(let side of [-1, 1]) {
                             for(let j=0; j<3; j++) {
                                 let spread = 0.2 + j*0.15; let len = 120 + j*30; let alpha = 0.6 - j*0.15;
                                 ctx.save(); ctx.translate(0, -60); 
                                 let plumeGrad = ctx.createLinearGradient(0, 0, side*100, -150);
-                                plumeGrad.addColorStop(0, `rgba(${r},${g},${b}, ${alpha})`); plumeGrad.addColorStop(0.7, `rgba(${r},${g},${b}, ${alpha*0.5})`); plumeGrad.addColorStop(1, "transparent");
+                                plumeGrad.addColorStop(0, `rgba(${r},${g},${b}, ${alpha})`); 
+                                plumeGrad.addColorStop(0.7, `rgba(${r},${g},${b}, ${alpha*0.5})`); 
+                                plumeGrad.addColorStop(1, "transparent");
                                 ctx.fillStyle = plumeGrad;
                                 ctx.beginPath(); ctx.moveTo(0, 0);
                                 let cp1x = side * 50 + flow*20; let cp1y = -len * 0.5;
@@ -889,11 +954,11 @@
                     }
                     // [티어 5] Cosmic/Creation
                     else if (chance < 2400000000) {
-                        ctx.shadowBlur = 50; ctx.shadowColor = aura.color;
                         ctx.save(); applyGroundPerspective();
                         let abyssGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 180);
                         abyssGrad.addColorStop(0, "#000"); abyssGrad.addColorStop(0.5, aura.color); abyssGrad.addColorStop(1, "transparent");
-                        ctx.fillStyle = abyssGrad; ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); ctx.fill(); ctx.restore();
+                        ctx.fillStyle = abyssGrad; ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); ctx.fill(); 
+                        ctx.restore();
 
                         ctx.save(); ctx.translate(0, -65); ctx.rotate(time * 0.2);
                         for(let i=0; i<2; i++) {
@@ -911,17 +976,24 @@
                             ctx.beginPath(); ctx.moveTo(px, py); let tailAng = angle - 0.3;
                             ctx.lineTo(Math.cos(tailAng)*radius, Math.sin(tailAng)*radius*0.3);
                             ctx.strokeStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.lineWidth = 3; ctx.stroke();
-                            ctx.fillStyle = "#fff"; ctx.shadowBlur = 15; ctx.shadowColor = "#fff";
+                            
+                            // 별 (그림자 제거, 대신 겹쳐 그리기)
+                            ctx.fillStyle = "#fff"; 
                             ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
+                            ctx.fillStyle = `rgba(${r},${g},${b}, 0.3)`; 
+                            ctx.beginPath(); ctx.arc(px, py, 8, 0, TWO_PI); ctx.fill();
                         }
                         ctx.restore();
-
-                        ctx.fillStyle = "#fff"; ctx.shadowBlur = 80; ctx.shadowColor = aura.color;
-                        ctx.beginPath(); ctx.arc(0, -65, 15, 0, TWO_PI); ctx.fill();
+                        
+                        // 중앙 블랙홀 (그림자 대신 큰 그라데이션)
+                        let holeGlow = ctx.createRadialGradient(0, -65, 10, 0, -65, 50);
+                        holeGlow.addColorStop(0, "#fff"); holeGlow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                        ctx.fillStyle = holeGlow; ctx.beginPath(); ctx.arc(0, -65, 50, 0, TWO_PI); ctx.fill();
+                        
+                        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, -65, 15, 0, TWO_PI); ctx.fill();
                     }
                     // [티어 6] "The Away From The World"
                     else {
-                        ctx.shadowBlur = 80; ctx.shadowColor = "#ffffff";
                         ctx.save(); applyGroundPerspective();
                         let groundGrad = ctx.createRadialGradient(0, 0, 50, 0, 0, 400);
                         groundGrad.addColorStop(0, "#fff"); groundGrad.addColorStop(1, "transparent");
@@ -945,11 +1017,17 @@
 
                         let eyeY = -350 + Math.sin(time)*10;
                         let eyeOpen = Math.abs(Math.sin(time*1.5)); 
-                        ctx.fillStyle = "#fff"; ctx.shadowBlur = 100;
+                        
+                        // 눈 후광 (그림자 대체)
+                        let eyeGlow = ctx.createRadialGradient(0, eyeY, 50, 0, eyeY, 200);
+                        eyeGlow.addColorStop(0, "rgba(255,255,255,0.8)"); eyeGlow.addColorStop(1, "transparent");
+                        ctx.fillStyle = eyeGlow; ctx.beginPath(); ctx.arc(0, eyeY, 200, 0, TWO_PI); ctx.fill();
+
+                        ctx.fillStyle = "#fff"; 
                         ctx.beginPath(); ctx.ellipse(0, eyeY, 120, 20 * eyeOpen, 0, 0, TWO_PI); ctx.fill();
                         ctx.fillStyle = `rgba(255,255,255, ${0.5 * eyeOpen})`; ctx.fillRect(-2, eyeY - 200, 4, 400);
 
-                        ctx.fillStyle = "#fff"; ctx.shadowBlur = 20;
+                        ctx.fillStyle = "#fff"; 
                         for(let i=0; i<10; i++) {
                             let px = (Math.random()-0.5) * 400; let py = -400 + ((time*30 + i*50) % 500);
                             ctx.beginPath(); ctx.arc(px, py, Math.random()*4, 0, TWO_PI); ctx.fill();
@@ -1741,8 +1819,9 @@
         
         // ★ [맵 확장] 월드 크기 및 카메라 변수 추가
         const WORLD_WIDTH = 10000; // 전체 맵의 가로 길이 (원하는 만큼 늘릴 수 있음)
-        let cameraX = 0;           // 현재 카메라 위치
-        let targetCameraX = 0;     // 목표 카메라 위치 (부드러운 이동용)
+        // ★ [수정] 카메라가 플레이어(맵 중앙)를 비추며 시작
+        let cameraX = (WORLD_WIDTH / 2) - (W / 2);           
+        let targetCameraX = cameraX; // 타겟도 맞춰서 스르륵 이동 방지
 
         // [최적화 1] DOM 요소 캐싱 (변수 미리 선언)
         const DOM = {
@@ -1784,6 +1863,8 @@
             showClouds: true,
             showOtherAttacks: true,
             showFireflies: true,
+            // ★ [추가] 화려한 그래픽 (그라데이션, 별똥별, 환경입자) 제어
+            fancyGraphics: true,
             
             // ★ [변경] 기존 simpleAttacks 삭제 -> 3개로 분리
             simpleProjectiles: false, // 공격 이펙트 (투사체, 타격 파티클, 흔들림)
@@ -1836,61 +1917,71 @@
                     ownedGears = data.ownedGears || [];
                     equippedGears = data.equippedGears || [null, null, null];
                     consumableInv = data.consumableInv || {};
+                    // ★ 장착 중인 오라 이름 복구
+                    if (data.equippedAuraName) equippedAuraName = data.equippedAuraName;
 
-                    // 2. [신규] 연출 스킵 설정값 복구
+                    // 2. 슬라이더 설정값 복구 (연출 스킵, 자동 분해, 자동 정지)
                     if (data.skipThreshold !== undefined) {
                         const skipSlider = document.getElementById("skip-slider");
-                        if (skipSlider) {
-                            // 슬라이더 UI 위치 조정
-                            skipSlider.value = data.skipThreshold;
-                            // 실제 로직에 값 적용 (updateSkipThreshold 함수 호출)
-                            updateSkipThreshold(data.skipThreshold, true); 
-                        }
+                        if (skipSlider) skipSlider.value = data.skipThreshold;
+                        updateSkipThreshold(data.skipThreshold, true);
                     }
 
-                    // ★ [추가] 그래픽 설정 불러오기
+                    if (data.autoScrapVal !== undefined) {
+                        const scrapSlider = document.getElementById("auto-scrap-slider");
+                        if (scrapSlider) scrapSlider.value = data.autoScrapVal;
+                    }
+
+                    if (data.autoStopVal !== undefined) {
+                        const stopSlider = document.getElementById("auto-stop-slider");
+                        if (stopSlider) stopSlider.value = data.autoStopVal;
+                    }
+                    
+                    // 슬라이더 값을 변수에 실제 적용
+                    updateAutoThresholds();
+
+                    // 3. 그래픽 설정 복구 (GRAPHICS 객체 병합)
                     if (data.graphicsSettings) {
                         Object.assign(GRAPHICS, data.graphicsSettings);
                         
-                        // UI 요소(체크박스, 슬라이더) 상태 동기화
-                        document.getElementById('chk-grass').checked = GRAPHICS.showGrass;
-                        document.getElementById('chk-clouds').checked = GRAPHICS.showClouds;
-                        document.getElementById('chk-others').checked = GRAPHICS.showOtherAttacks;
-                        // 슬라이더 값 설정 (0.0~2.0 -> 0~20)
-                        document.querySelector('input[type="range"][oninput*="weatherDensity"]').value = GRAPHICS.weatherDensity * 10;
-                        document.getElementById('weather-val-label').innerText = Math.round(GRAPHICS.weatherDensity * 100) + "%";
+                        // UI 체크박스 상태 동기화 함수 (코드를 짧게 줄임)
+                        const setCheck = (id, val) => {
+                            const el = document.getElementById(id);
+                            if(el) el.checked = val;
+                        };
+
+                        setCheck('chk-grass', GRAPHICS.showGrass);
+                        setCheck('chk-clouds', GRAPHICS.showClouds);
+                        setCheck('chk-others', GRAPHICS.showOtherAttacks);
+                        
+                        // 간소화 옵션들
+                        setCheck('chk-proj', GRAPHICS.simpleProjectiles);
+                        setCheck('chk-aura', GRAPHICS.simpleAuras);
+                        setCheck('chk-mob', GRAPHICS.simpleMobs);
+                        
+                        // 추가된 옵션들 (반딧불이, 화려한 그래픽)
+                        setCheck('chk-fireflies', GRAPHICS.showFireflies);
+                        setCheck('chk-fancy', GRAPHICS.fancyGraphics); // ★ 핵심
+
+                        // 날씨 밀도 슬라이더 복구 (0~20 범위)
+                        const weatherSlider = document.querySelector('input[type="range"][oninput*="weatherDensity"]');
+                        if (weatherSlider) {
+                            weatherSlider.value = GRAPHICS.weatherDensity * 10;
+                            const label = document.getElementById('weather-val-label');
+                            if (label) label.innerText = Math.round(GRAPHICS.weatherDensity * 100) + "%";
+                        }
                     }
 
-                    // ★ [수정] 분리된 3개 옵션 UI 연동
-                    if(document.getElementById('chk-proj')) document.getElementById('chk-proj').checked = GRAPHICS.simpleProjectiles;
-                    if(document.getElementById('chk-aura')) document.getElementById('chk-aura').checked = GRAPHICS.simpleAuras;
-                    if(document.getElementById('chk-mob')) document.getElementById('chk-mob').checked = GRAPHICS.simpleMobs;
-
-                    // ★ [추가] 반딧불이 체크박스 상태 복구
-                    if(document.getElementById('chk-fireflies')) {
-                        document.getElementById('chk-fireflies').checked = GRAPHICS.showFireflies;
-                    }
-
-                    // ★ 4. [추가] 자동 분해/정지 설정 복구
-                    if (data.autoScrapVal !== undefined) {
-                        document.getElementById("auto-scrap-slider").value = data.autoScrapVal;
-                    }
-                    if (data.autoStopVal !== undefined) {
-                        document.getElementById("auto-stop-slider").value = data.autoStopVal;
-                    }
-                    // ★ 슬라이더 값을 기반으로 실제 로직 변수와 라벨 텍스트 갱신
-                    updateAutoThresholds();
-                    
                     console.log("🎮 세이브 데이터를 성공적으로 불러왔습니다.");
+                    
+                    // 4. UI 전체 갱신 (인벤토리, 장비창 등 화면 표시)
+                    updateAllUI();
                 }
             } catch (e) {
                 console.error("❌ 데이터를 불러오는 중 오류 발생:", e);
-                // 오류 발생 시 안전을 위해 초기화 로직을 둘 수 있습니다.
             }
-
-            // 3. UI 전체 업데이트
-            updateAllUI();
         }
+        
         function updateAllUI() { document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`; calcBuffs(); renderInventory(); renderConsumableList(); renderAlchemyList(); renderCrafting(); renderEquipment(); renderQuickBar(); updateSkipThreshold(document.getElementById("skip-slider").value, true);}
         
         // [수정] 버프 계산 및 UI 업데이트 (중복 표시 방지 추가)
@@ -2274,21 +2365,19 @@
         }
         const vfxParticles = new ParticleSystem();
 
-        // (기존 코드) 화면 크기 정의
-        let W = window.innerWidth; let H = window.innerHeight;
-
         const player = {
-            x: W / 2, y: H * 0.85, 
-            vx: 0,                 
-            accel: 0.4,       
-            friction: 0.85,   
-            maxSpeed: 4,      
+            // ★ [수정] 맵의 정중앙에서 시작 (WORLD_WIDTH / 2)
+            x: WORLD_WIDTH / 2, 
+            y: H * 0.85, 
+            vx: 0,                  
+            accel: 0.4,        
+            friction: 0.85,    
+            maxSpeed: 4,       
             width: 24, height: 100,
-            facingRight: true,     
+            facingRight: true,      
             walkFrame: 0,
-            // ★ 수정됨: 마디 수 감소 (10 -> 6) 및 초기화
-            // 각 마디는 {x, y} 좌표를 가짐
-            scarfSegments: Array.from({ length: 6 }, () => ({ x: W/2, y: H*0.85 }))
+            // ★ [수정] 머플러도 중앙에서 시작하도록 초기값 변경
+            scarfSegments: Array.from({ length: 6 }, () => ({ x: WORLD_WIDTH / 2, y: H * 0.85 }))
         };
         
         // ★ 신규 추가: 머플러 물리 설정값
@@ -2945,6 +3034,34 @@
         function hexToRgb(hex) { let bigint = parseInt(hex.slice(1), 16); return [ (bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255 ]; }
         function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
+        // ★ [복구] 사이드바 알림 함수 (이게 없어서 날씨가 멈췄던 것임)
+        let notifTimer = null;
+        function showSideNotification(label, text, color = "#FFD700") {
+            const bar = document.getElementById("notification-bar");
+            const labelEl = document.getElementById("notif-label");
+            const contentEl = document.getElementById("notif-content");
+
+            if (!bar || !labelEl || !contentEl) return;
+
+            // 내용 업데이트
+            labelEl.innerText = label;
+            contentEl.innerHTML = text; 
+            contentEl.style.color = "white";
+            contentEl.style.textShadow = `0 0 15px ${color}`;
+            bar.style.borderRight = `5px solid ${color}`; // 테두리 색상 변경
+
+            // 애니메이션 재실행 트릭
+            bar.classList.remove("show");
+            void bar.offsetWidth; // 강제 리플로우 (애니메이션 초기화)
+            bar.classList.add("show");
+
+            // 4초 뒤 자동 숨김
+            if (notifTimer) clearTimeout(notifTimer);
+            notifTimer = setTimeout(() => {
+                bar.classList.remove("show");
+            }, 4000);
+        }
+
         // ★ [기믹 4] 숨겨진 글리치 날씨가 추가되었습니다. (2.5% 확률)
         const weathers = [ 
             { id: "clear", name: "맑음", chance: 30, condition: "ALL", music: "bgms/clear.mp3", sfx: "weathers/clear.mp3", buff: { luck: 0.1, speed: 0.1 } }, 
@@ -2996,28 +3113,95 @@
 
         function generateNature() { 
             W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H; vfxCanvas.width = W; vfxCanvas.height = H;
-            landscapes = []; trees = []; grassBlades = []; stars = []; clouds = [];
             
-            // ★ [수정] W 대신 WORLD_WIDTH를 기준으로 맵 전체에 오브젝트 배치
-            const extW = WORLD_WIDTH + W; // 화면 끝을 넘어서까지 여유롭게 생성
-            const offsetX = -W;           // 왼쪽 끝 여유분
+            landscapes = []; trees = []; grassBlades = []; stars = []; clouds = [];
+            ruins = []; 
+            const extW = WORLD_WIDTH + W;
+            
+            // 1. [원경] 맨 뒷산 뒤 (대부분 하늘을 뚫고 나감 = 웅장함)
+            for(let i=0; i<8; i++) {
+                ruins.push({
+                    x: (Math.random() * extW) - (W * 0.5),
+                    y: H * 0.95, 
+                    w: Math.random() * 50 + 70, 
+                    h: Math.random() * 300 + 400, // 기본 높이
+                    type: "pillar", 
+                    depth: Math.random() * 0.05 + 0.1, 
+                    tone: -30,
+                    isTall: Math.random() < 0.8 // ★ 80% 확률로 하늘 뚫음
+                });
+            }
 
+            // 2. [중경] 뒷산과 앞산 사이 (반반 섞임)
+            for(let i=0; i<12; i++) {
+                let isArch = Math.random() < 0.4;
+                ruins.push({
+                    x: (Math.random() * extW) - (W * 0.5),
+                    y: H * 1.05, 
+                    w: isArch ? (Math.random() * 90 + 90) : (Math.random() * 50 + 50),
+                    h: Math.random() * 400 + 400,
+                    type: isArch ? "arch" : "pillar",
+                    depth: Math.random() * 0.1 + 0.25, 
+                    tone: -10,
+                    isTall: Math.random() < 0.4 // ★ 40% 확률로 하늘 뚫음
+                });
+            }
+
+            // 3. [근경] 앞산과 언덕 사이 (주로 부서진 유적 위주)
+            for(let i=0; i<10; i++) {
+                let isArch = Math.random() < 0.3;
+                ruins.push({
+                    x: (Math.random() * extW) - (W * 0.5),
+                    y: H * 1.15, 
+                    w: isArch ? (Math.random() * 110 + 100) : (Math.random() * 70 + 60),
+                    h: Math.random() * 500 + 500,
+                    type: isArch ? "arch" : "pillar",
+                    depth: Math.random() * 0.2 + 0.5, 
+                    tone: 10,
+                    isTall: Math.random() < 0.2 // ★ 20% 확률로만 하늘 뚫음 (시야 확보)
+                });
+            }
+            
+            // (나머지 지형 생성 코드는 그대로 유지)
+            const offsetX = -W;
             for (let i = 0; i < 600; i++) stars.push({ x: Math.random() * extW, y: Math.random() * H, size: Math.random() * 2, alpha: Math.random() }); 
             for(let i=0; i<40; i++) clouds.push({x: Math.random() * extW, y: Math.random() * H * 0.4, size: Math.random() * 60 + 40, speed: Math.random() * 0.5 + 0.1 });
-
-            // depth 재조정: 가장 앞쪽 언덕(플레이어가 밟는 땅)의 depth를 1.0으로 설정하여 카메라와 1:1로 움직이게 함
             let mountainsBack = { color: [40, 45, 60], points: [], depth: 0.15, baseFog: 0.8 }; 
             for (let x = offsetX; x <= extW; x += 40) { let y = H * 0.4 - Math.sin(x * 0.002) * 150 - Math.cos(x * 0.005) * 50; mountainsBack.points.push({ x: x, y: y }); } landscapes.push(mountainsBack); 
-            
             let mountainsFront = { color: [30, 35, 50], points: [], depth: 0.35, baseFog: 0.6 }; 
             for (let x = offsetX; x <= extW; x += 35) { let y = H * 0.55 - Math.cos(x * 0.004) * 100 + Math.sin(x * 0.01) * 30; mountainsFront.points.push({ x: x, y: y }); } landscapes.push(mountainsFront); 
-            
             let plains = { color: [25, 50, 30], points: [], depth: 0.7, baseFog: 0.3 }; 
             for (let x = offsetX; x <= extW; x += 30) { let y = H * 0.7 + Math.sin(x * 0.003) * 50; plains.points.push({ x: x, y: y }); if (Math.random() < 0.2) trees.push({ id: trees.length, layer: 2, baseX: x, baseY: y, size: Math.random() * 0.6 + 0.9, type: Math.floor(Math.random()*3) }); } landscapes.push(plains); 
-            
-            // 플레이어가 서 있는 메인 레이어 (depth: 1.0)
+            // 4. [바닥 레이어] hills - 완만하고 자연스러운 복합 파동 지형
             let hills = { color: [20, 40, 25], points: [], depth: 1.0, baseFog: 0.1 }; 
-            for (let x = offsetX; x <= extW; x += 25) { let y = H * 0.85 + Math.cos(x * 0.006) * 35; hills.points.push({ x: x, y: y }); if (Math.random() < 0.9) for (let g = 0; g < 8; g++) grassBlades.push({ id: grassBlades.length, baseX: x + Math.random() * 20, baseY: y + Math.random() * 10, h: Math.random() * 20 + 15, swayOffset: Math.random() * 100 }); } landscapes.push(hills); 
+            for (let x = offsetX; x <= extW; x += 25) { 
+                // 기본 베이스 높이 (0.75 -> 0.82로 살짝 낮춤, 공간 확보)
+                let baseY = H * 0.82;
+
+                // 여러 파동을 섞어 '노이즈' 효과를 줌
+                let wave1 = Math.cos(x * 0.0007) * 12; // 아주 크고 완만한 흐름
+                let wave2 = Math.sin(x * 0.003) * 5;   // 중간 크기의 불규칙함
+                let wave3 = Math.cos(x * 0.01) * 2;    // 아주 미세한 땅의 요철
+
+                let y = baseY + wave1 + wave2 + wave3;
+
+                hills.points.push({ x: x, y: y }); 
+
+                // 풀(Grass) 생성 로직 (기존 유지)
+                if (Math.random() < 0.9) {
+                    for (let g = 0; g < 8; g++) {
+                        grassBlades.push({ 
+                            id: grassBlades.length, 
+                            baseX: x + Math.random() * 20, 
+                            baseY: y + Math.random() * 10, 
+                            h: Math.random() * 20 + 15, 
+                            swayOffset: Math.random() * 100 
+                        });
+                    }
+                }
+            } 
+            landscapes.push(hills);
+        
         }
 
         // 💡 [수정] 마우스 원근감이 아닌, 실제 '월드 X 좌표'에 따른 지형 높이 반환
@@ -3257,7 +3441,7 @@
         let mouseParallaxY = 0;
 
         window.addEventListener("mousemove", (e) => { 
-            targetParallaxX = (e.clientX - W / 2) / (W / 2); 
+            //targetParallaxX = (e.clientX - W / 2) / (W / 2); 
             // targetParallaxY 대신 mouseParallaxY 사용
             mouseParallaxY = (e.clientY - H / 2) / (H / 2); 
         });
@@ -3400,8 +3584,113 @@
             ctx.restore();
         }
 
+        // ★ [최종 수정판 5] 줄무늬 고정 (Texture Locking) 패치
+        function renderRuins(fogRgb, minD, maxD) {
+            ctx.save();
+            let layerRuins = ruins.filter(r => r.depth >= minD && r.depth < maxD);
+            layerRuins.sort((a, b) => a.depth - b.depth);
+
+            for(let rObj of layerRuins) {
+                let px = rObj.x - cameraX * rObj.depth; 
+                let py = rObj.y - (currentParallaxY * 40 * rObj.depth); 
+                
+                let topY = rObj.isTall ? -5000 : (py - rObj.h);
+
+                if (px < -rObj.w * 1.5 || px > W + rObj.w * 1.5) continue;
+
+                let haze = Math.max(0, 1 - rObj.depth * 1.2); haze = Math.min(1, haze + currentFog * 0.7);
+                
+                let baseTone = 160 + rObj.tone;
+                let baseColor = [baseTone, baseTone - 5, baseTone - 10];
+
+                let r = lerp(baseColor[0], fogRgb[0], haze);
+                let g = lerp(baseColor[1], fogRgb[1], haze);
+                let b = lerp(baseColor[2], fogRgb[2], haze);
+                
+                let shadowColor = `rgb(${r*0.5}, ${g*0.5}, ${b*0.5})`;
+                let midColor = `rgb(${r*0.8}, ${g*0.8}, ${b*0.8})`;
+                let highlightColor = `rgb(${r*1.05}, ${g*1.05}, ${b*1.05})`;
+                let deepCrackColor = `rgba(0,0,0, ${0.3 * rObj.depth})`;
+
+                function drawMonolith(x, yBottom, yTop, w) {
+                    let height = yBottom - yTop;
+
+                    // 1. 기둥 몸통
+                    let grad = ctx.createLinearGradient(x, 0, x + w, 0);
+                    grad.addColorStop(0, shadowColor);
+                    grad.addColorStop(0.3, midColor);
+                    grad.addColorStop(0.7, highlightColor);
+                    grad.addColorStop(1, shadowColor);
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(x, yTop, w, height);
+
+                    // 2. 지층 무늬 (★ 핵심 수정: 기둥 위치에 고정시킴)
+                    ctx.fillStyle = deepCrackColor;
+                    
+                    // 화면에 보이는 영역 계산
+                    let drawStart = Math.max(topY, -100);
+                    let drawEnd = Math.min(py, H + 100);
+
+                    // ★ [패치] 무늬가 시작되는 기준점을 기둥의 바닥(py)에 맞춰서 계산 (Texture Locking)
+                    // 이렇게 하면 cy 루프가 항상 기둥의 특정 지점에서 시작되므로 무늬가 따라다님
+                    let step = 15; // 무늬 간격
+                    let offset = py % step; 
+                    // drawStart보다 크거나 같은 첫 번째 '고정된' 좌표 찾기
+                    let loopY = drawStart - (drawStart % step) + offset;
+                    if(loopY < drawStart) loopY += step;
+
+                    for(let cy = loopY; cy < drawEnd; cy += step) {
+                        // ★ [패치] sin 함수 안에 들어가는 값도 (cy - py)로 상대 좌표 사용
+                        // 이제 카메라가 움직여도 (cy - py) 값은 일정하므로 무늬가 안 움직임
+                        let relY = cy - py; 
+                        let thickness = Math.sin(relY * 0.02 + rObj.x*0.01) * 4 + 5; 
+                        
+                        if (thickness > 6) { 
+                             ctx.fillRect(x, cy, w, thickness * 0.4);
+                        }
+                    }
+                }
+
+                if (rObj.type === "pillar") {
+                    let pX = px - rObj.w/2;
+                    drawMonolith(pX, py, topY, rObj.w);
+
+                    if (!rObj.isTall) {
+                        ctx.fillStyle = shadowColor;
+                        ctx.beginPath();
+                        ctx.moveTo(pX, topY);
+                        ctx.lineTo(pX + rObj.w * 0.3, topY - rObj.w*0.05);
+                        ctx.lineTo(pX + rObj.w * 0.7, topY + rObj.w*0.02);
+                        ctx.lineTo(pX + rObj.w, topY);
+                        ctx.lineTo(pX + rObj.w, topY + rObj.depth*10); 
+                        ctx.lineTo(pX, topY + rObj.depth*10);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+
+                } else {
+                    let colW = rObj.w * 0.25; 
+                    let leftColX = px - rObj.w/2;
+                    let rightColX = px + rObj.w/2 - colW;
+                    let archBaseY = py - rObj.h;
+                    let archThickness = colW; 
+
+                    drawMonolith(leftColX, py, rObj.isTall ? -5000 : archBaseY, colW);
+                    drawMonolith(rightColX, py, rObj.isTall ? -5000 : archBaseY, colW);
+
+                    if (!rObj.isTall) {
+                        ctx.fillStyle = midColor;
+                        ctx.fillRect(leftColX - colW*0.2, archBaseY - archThickness, rObj.w + colW*0.4, archThickness);
+                        ctx.fillStyle = shadowColor;
+                        ctx.fillRect(leftColX - colW*0.2, archBaseY - archThickness*0.2, rObj.w + colW*0.4, archThickness*0.2);
+                    }
+                }
+            }
+            ctx.restore();
+        }
+
+        // ★ [수정] 지형 렌더링 (화려한 그래픽 옵션 적용)
         function renderLand(layer, index, fogRgb) { 
-            // ★ [수정] 카메라 위치에 레이어별 원근감(depth)을 곱하여 이동시킴
             let offsetX = -cameraX * layer.depth; 
             let offsetY = -currentParallaxY * 50 * layer.depth; 
             ctx.beginPath(); ctx.moveTo(offsetX - W, H); 
@@ -3410,18 +3699,28 @@
                 ctx.quadraticCurveTo(p1.x + offsetX, p1.y + offsetY, cpX + offsetX, cpY + offsetY);
             }
             ctx.lineTo(WORLD_WIDTH + offsetX + W, H); ctx.closePath();
-            let [r, g, b] = layer.color; let isNight = (hours < 6 || hours > 18); let darkFactor = isNight ? 0.25 : 1.0; r *= darkFactor; g *= darkFactor; b *= darkFactor; 
+            
+            let [r, g, b] = layer.color; 
+            let isNight = (hours < 6 || hours > 18); 
+            let darkFactor = isNight ? 0.25 : 1.0; 
+            r *= darkFactor; g *= darkFactor; b *= darkFactor; 
             
             if (index < 2) { let s = mountainSnowLevel + (currentSnow * 0.5); r = lerp(r, 255, s); g = lerp(g, 255, s); b = lerp(b, 255, s); } 
             else { r = lerp(r, 255, currentSnow); g = lerp(g, 255, currentSnow); b = lerp(b, 255, currentSnow); } 
             
-            let haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); r = lerp(r, fogRgb[0], haze); g = lerp(g, fogRgb[1], haze); b = lerp(b, fogRgb[2], haze); 
+            let haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); 
+            r = lerp(r, fogRgb[0], haze); g = lerp(g, fogRgb[1], haze); b = lerp(b, fogRgb[2], haze); 
             
-            // 💡 [그래픽 개선] 단색 채우기 대신 세로 그라데이션 적용 (위는 밝고 아래는 어둡게)
-            let grad = ctx.createLinearGradient(0, H * 0.4, 0, H);
-            grad.addColorStop(0, `rgb(${r},${g},${b})`);
-            grad.addColorStop(1, `rgb(${r * 0.5},${g * 0.5},${b * 0.5})`); // 아래로 갈수록 50% 어두워짐
-            ctx.fillStyle = grad; 
+            // ★ [핵심] 화려한 그래픽이 켜져 있을 때만 그라데이션 사용
+            if (GRAPHICS.fancyGraphics) {
+                let grad = ctx.createLinearGradient(0, H * 0.4, 0, H);
+                grad.addColorStop(0, `rgb(${r},${g},${b})`);
+                grad.addColorStop(1, `rgb(${r * 0.5},${g * 0.5},${b * 0.5})`);
+                ctx.fillStyle = grad; 
+            } else {
+                // 꺼져 있으면 그냥 단색 (성능 UP)
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+            }
             ctx.fill(); 
         }
 
@@ -3429,7 +3728,7 @@
         function renderTrees(layerIndex, fogRgb) { 
             let layer = landscapes[layerIndex]; 
             let offsetX = -cameraX * layer.depth; 
-            let offsetY = -currentParallaxY * 50 * layer.depth; 
+            let offsetY = -currentParallaxY * 50 * layer.depth +2; 
             let haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); 
             let isNight = (hours < 6 || hours > 18); 
 
@@ -3576,90 +3875,97 @@
 
             const h = 100; const w = 24;
 
-            // 0. 장착된 오라 이펙트 
+            // ========================================================
+            // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (최적화 + 디자인 유지) ---
+            // ========================================================
             if (equippedAuraName) {
+                // ========================================================
+                // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (최적화 + 디자인 유지) ---
+                // ========================================================
                 let aura = allAuras.find(a => a.name === equippedAuraName);
                 if (aura) {
-                    // ★ [신규] 이펙트 간소화 모드 (성능 최적화)
+                    // ★ [간소화 모드 ON] - 성능 최적화 (기존 동일)
                     if (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleAuras) {
                         ctx.save();
-                        // 위치를 캐릭터 등 뒤 중앙으로 조정
                         ctx.translate(0, -50); 
                         
-                        // 1. 단순한 반투명 원 (후광)
-                        ctx.globalAlpha = 0.2;
-                        ctx.fillStyle = aura.color;
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 50, 0, TWO_PI);
-                        ctx.fill();
+                        ctx.globalAlpha = 0.2; ctx.fillStyle = aura.color; 
+                        ctx.beginPath(); ctx.arc(0, 0, 45, 0, TWO_PI); ctx.fill();
 
-                        // 2. 외곽선 (등급 색상 강조)
-                        ctx.globalAlpha = 0.8;
-                        ctx.strokeStyle = aura.color;
-                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 0.8; ctx.strokeStyle = aura.color; ctx.lineWidth = 2; 
                         ctx.stroke();
 
-                        // 3. 고등급(100만 이상)일 경우 왕관 아이콘 표시로 차별화
                         if (aura.chanceX >= 1000000) {
-                            ctx.fillStyle = "#FFF";
-                            ctx.font = "20px serif";
-                            ctx.textAlign = "center";
-                            ctx.fillText("👑", 0, -60);
+                            ctx.fillStyle = "#FFF"; ctx.font = "20px serif"; 
+                            ctx.textAlign = "center"; ctx.fillText("👑", 0, -55);
                         }
-
                         ctx.restore();
                     } 
-                    // ★ [기존] 화려한 이펙트 모드 (코드는 건드리지 않음)
+                    // ★ [간소화 모드 OFF] - 화려함 유지 + 렉 제거 버전
                     else {
                         ctx.save();
+                        // [핵심 최적화] 그림자 대신 빛 혼합 모드 사용 (훨씬 빠름)
                         ctx.globalCompositeOperation = 'lighter'; 
+                        
                         let chance = aura.chanceX;
                         let [r, g, b] = hexToRgb(aura.color);
-                        let time = globalRenderTime * 0.015; 
+                        let time = globalRenderTime * 0.015;
                         const applyGroundPerspective = () => ctx.scale(1, 0.35);
+
+                        // 공통 바닥 발광 (ShadowBlur 대체용 가짜 광원)
+                        ctx.save(); applyGroundPerspective();
+                        let baseGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 60);
+                        baseGlow.addColorStop(0, `rgba(${r},${g},${b}, 0.4)`); // 중심부 빛
+                        baseGlow.addColorStop(1, "transparent");
+                        ctx.fillStyle = baseGlow; 
+                        ctx.beginPath(); ctx.arc(0, 0, 60, 0, TWO_PI); ctx.fill();
+                        ctx.restore();
 
                         // [티어 1] Common ~ Rare
                         if (chance < 1000) {
-                            ctx.save(); applyGroundPerspective();
-                            let glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 40);
-                            glowGrad.addColorStop(0, `rgba(${r},${g},${b}, 0.5)`);
-                            glowGrad.addColorStop(1, "transparent");
-                            ctx.fillStyle = glowGrad; ctx.beginPath(); ctx.arc(0, 0, 40, 0, TWO_PI); ctx.fill();
-                            ctx.restore();
-
-                            ctx.fillStyle = aura.color; ctx.shadowBlur = 5; ctx.shadowColor = aura.color;
+                            ctx.fillStyle = aura.color; 
+                            // 그림자 제거 -> 대신 투명도 조절로 느낌 유지
                             for(let i=0; i<3; i++) {
                                 let pTime = (time + i * 2) % 6; 
                                 ctx.globalAlpha = Math.max(0, 1 - (pTime / 6));
-                                ctx.beginPath(); ctx.arc(Math.sin(time + i) * 15, -pTime * 15, 1.5, 0, TWO_PI); ctx.fill();
+                                ctx.beginPath(); ctx.arc(Math.sin(time + i) * 15, -pTime * 15, 2, 0, TWO_PI); ctx.fill();
                             }
                         }
                         // [티어 2] Epic ~ Legend
                         else if (chance < 1000000) {
-                            ctx.shadowBlur = 20; ctx.shadowColor = aura.color;
                             ctx.save(); applyGroundPerspective();
+                            // 쉐도우 블러 제거, 라인 두께 조절로 발광 느낌
                             drawMagicCircle(ctx, 0, 0, 50, time, aura.color, 0.5);
                             ctx.restore();
+                            
+                            ctx.lineWidth = 2;
                             for(let i=0; i<3; i++) {
                                 let angle = time * 2 + (TWO_PI/3)*i;
                                 let px = Math.cos(angle) * 35; let py = -40 + Math.sin(angle) * 15;
-                                ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 2;
+                                
+                                // 잔상 (그림자 대신 옅은 선)
+                                ctx.strokeStyle = `rgba(${r},${g},${b}, 0.3)`; 
                                 ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(Math.cos(angle-0.2)*35, -40 + Math.sin(angle-0.2)*15); ctx.stroke();
+                                
+                                // 별
                                 ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
+                                // 별 주변 가짜 광원
+                                ctx.fillStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.beginPath(); ctx.arc(px, py, 6, 0, TWO_PI); ctx.fill();
                             }
                         }
                         // [티어 3] Mythic ~ God
                         else if (chance < 100000000) {
-                            ctx.shadowBlur = 40; ctx.shadowColor = aura.color;
                             ctx.save(); applyGroundPerspective(); 
                             drawMagicCircle(ctx, 0, 0, 75, time, aura.color, 0.6);
                             drawMagicCircle(ctx, 0, 0, 110, -time*1.5, "#fff", 0.4);
+                            
                             let pulse = Math.sin(time*3)*15;
-                            ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 3;
+                            ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`; ctx.lineWidth = 3;
                             ctx.beginPath(); ctx.arc(0, 0, 130 + pulse, 0, TWO_PI); ctx.stroke();
                             ctx.restore();
 
                             ctx.save(); ctx.translate(0, -60); ctx.rotate(time * 0.5);
+                            // 그라데이션 콘 (이건 원래 빨라서 유지)
                             for(let i=0; i<16; i++) {
                                 ctx.rotate(TWO_PI/16);
                                 let grad = ctx.createLinearGradient(0, 0, 0, -110);
@@ -3669,7 +3975,8 @@
                             }
                             ctx.restore();
 
-                            ctx.strokeStyle = "#fff"; ctx.lineWidth = 1;
+                            // 회전하는 사각형들
+                            ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
                             for(let i=0; i<6; i++) {
                                 let angle = time + (TWO_PI/6)*i;
                                 let px = Math.cos(angle) * (50 + Math.sin(time*2+i)*10);
@@ -3680,13 +3987,14 @@
                         }
                         // [티어 4] Transcendent
                         else if (chance < 1000000000) {
-                            ctx.shadowBlur = 60; ctx.shadowColor = aura.color;
+                            // 바닥진
                             ctx.save(); applyGroundPerspective(); ctx.rotate(time*0.2);
-                            ctx.strokeStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.lineWidth = 2;
+                            ctx.strokeStyle = `rgba(${r},${g},${b}, 0.6)`; ctx.lineWidth = 2;
                             for(let i=0; i<6; i++) { ctx.rotate(Math.PI/3); ctx.beginPath(); ctx.moveTo(80,0); ctx.lineTo(150, 0); ctx.lineTo(120, 60); ctx.closePath(); ctx.stroke(); }
                             drawMagicCircle(ctx, 0, 0, 100, -time, "#fff", 0.6);
                             ctx.restore();
 
+                            // 회전하는 검 (그라데이션 유지)
                             ctx.save(); ctx.translate(0, -70);
                             for(let i=0; i<5; i++) {
                                 let angle = time + (TWO_PI/5)*i;
@@ -3696,17 +4004,24 @@
                                 swordGrad.addColorStop(0, "#fff"); swordGrad.addColorStop(1, aura.color);
                                 ctx.fillStyle = swordGrad;
                                 ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(5, 0); ctx.lineTo(0, 40); ctx.lineTo(-5, 0); ctx.fill();
+                                
+                                // 검 주변 빛 (그림자 대신 원 그리기)
+                                ctx.globalAlpha = 0.3; ctx.fillStyle = aura.color; 
+                                ctx.beginPath(); ctx.arc(0, 0, 15, 0, TWO_PI); ctx.fill();
                                 ctx.restore();
                             }
                             ctx.restore();
 
+                            // 날개 (그라데이션 자체가 예뻐서 그림자 없어도 됨)
                             let flow = Math.sin(time * 1.5);
                             for(let side of [-1, 1]) {
                                 for(let j=0; j<3; j++) {
                                     let spread = 0.2 + j*0.15; let len = 120 + j*30; let alpha = 0.6 - j*0.15;
                                     ctx.save(); ctx.translate(0, -60); 
                                     let plumeGrad = ctx.createLinearGradient(0, 0, side*100, -150);
-                                    plumeGrad.addColorStop(0, `rgba(${r},${g},${b}, ${alpha})`); plumeGrad.addColorStop(0.7, `rgba(${r},${g},${b}, ${alpha*0.5})`); plumeGrad.addColorStop(1, "transparent");
+                                    plumeGrad.addColorStop(0, `rgba(${r},${g},${b}, ${alpha})`); 
+                                    plumeGrad.addColorStop(0.7, `rgba(${r},${g},${b}, ${alpha*0.5})`); 
+                                    plumeGrad.addColorStop(1, "transparent");
                                     ctx.fillStyle = plumeGrad;
                                     ctx.beginPath(); ctx.moveTo(0, 0);
                                     let cp1x = side * 50 + flow*20; let cp1y = -len * 0.5;
@@ -3720,11 +4035,11 @@
                         }
                         // [티어 5] Cosmic/Creation
                         else if (chance < 2400000000) {
-                            ctx.shadowBlur = 50; ctx.shadowColor = aura.color;
                             ctx.save(); applyGroundPerspective();
                             let abyssGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 180);
                             abyssGrad.addColorStop(0, "#000"); abyssGrad.addColorStop(0.5, aura.color); abyssGrad.addColorStop(1, "transparent");
-                            ctx.fillStyle = abyssGrad; ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); ctx.fill(); ctx.restore();
+                            ctx.fillStyle = abyssGrad; ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); ctx.fill(); 
+                            ctx.restore();
 
                             ctx.save(); ctx.translate(0, -65); ctx.rotate(time * 0.2);
                             for(let i=0; i<2; i++) {
@@ -3742,17 +4057,24 @@
                                 ctx.beginPath(); ctx.moveTo(px, py); let tailAng = angle - 0.3;
                                 ctx.lineTo(Math.cos(tailAng)*radius, Math.sin(tailAng)*radius*0.3);
                                 ctx.strokeStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.lineWidth = 3; ctx.stroke();
-                                ctx.fillStyle = "#fff"; ctx.shadowBlur = 15; ctx.shadowColor = "#fff";
+                                
+                                // 별 (그림자 제거, 대신 겹쳐 그리기)
+                                ctx.fillStyle = "#fff"; 
                                 ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
+                                ctx.fillStyle = `rgba(${r},${g},${b}, 0.3)`; 
+                                ctx.beginPath(); ctx.arc(px, py, 8, 0, TWO_PI); ctx.fill();
                             }
                             ctx.restore();
-
-                            ctx.fillStyle = "#fff"; ctx.shadowBlur = 80; ctx.shadowColor = aura.color;
-                            ctx.beginPath(); ctx.arc(0, -65, 15, 0, TWO_PI); ctx.fill();
+                            
+                            // 중앙 블랙홀 (그림자 대신 큰 그라데이션)
+                            let holeGlow = ctx.createRadialGradient(0, -65, 10, 0, -65, 50);
+                            holeGlow.addColorStop(0, "#fff"); holeGlow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                            ctx.fillStyle = holeGlow; ctx.beginPath(); ctx.arc(0, -65, 50, 0, TWO_PI); ctx.fill();
+                            
+                            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, -65, 15, 0, TWO_PI); ctx.fill();
                         }
                         // [티어 6] "The Away From The World"
                         else {
-                            ctx.shadowBlur = 80; ctx.shadowColor = "#ffffff";
                             ctx.save(); applyGroundPerspective();
                             let groundGrad = ctx.createRadialGradient(0, 0, 50, 0, 0, 400);
                             groundGrad.addColorStop(0, "#fff"); groundGrad.addColorStop(1, "transparent");
@@ -3776,17 +4098,23 @@
 
                             let eyeY = -350 + Math.sin(time)*10;
                             let eyeOpen = Math.abs(Math.sin(time*1.5)); 
-                            ctx.fillStyle = "#fff"; ctx.shadowBlur = 100;
+                            
+                            // 눈 후광 (그림자 대체)
+                            let eyeGlow = ctx.createRadialGradient(0, eyeY, 50, 0, eyeY, 200);
+                            eyeGlow.addColorStop(0, "rgba(255,255,255,0.8)"); eyeGlow.addColorStop(1, "transparent");
+                            ctx.fillStyle = eyeGlow; ctx.beginPath(); ctx.arc(0, eyeY, 200, 0, TWO_PI); ctx.fill();
+
+                            ctx.fillStyle = "#fff"; 
                             ctx.beginPath(); ctx.ellipse(0, eyeY, 120, 20 * eyeOpen, 0, 0, TWO_PI); ctx.fill();
                             ctx.fillStyle = `rgba(255,255,255, ${0.5 * eyeOpen})`; ctx.fillRect(-2, eyeY - 200, 4, 400);
 
-                            ctx.fillStyle = "#fff"; ctx.shadowBlur = 20;
+                            ctx.fillStyle = "#fff"; 
                             for(let i=0; i<10; i++) {
                                 let px = (Math.random()-0.5) * 400; let py = -400 + ((time*30 + i*50) % 500);
                                 ctx.beginPath(); ctx.arc(px, py, Math.random()*4, 0, TWO_PI); ctx.fill();
                             }
                         }
-                        ctx.restore(); // 기존 화려한 모드 닫기
+                        ctx.restore(); // 화려한 모드 끝
                     }
                 }
             }
@@ -3855,31 +4183,33 @@
         }
 
         // =======================================================
-        // ★ [최종 리팩토링] 메인 렌더링 루프 (최적화 & 중복 제거)
+        // ★ [최종 리팩토링] 메인 렌더링 루프 (최적화 & 옵션 통합)
         // =======================================================
         function render() { 
             // -----------------------------------------------------
-            // [1] 시간, UI, 환경 변수 업데이트
+            // [1] 데이터 & 시간 업데이트 (로직 처리)
             // -----------------------------------------------------
+            globalRenderTime++;
+            windTime += 0.05;
+
+            // 시간 계산
             let preciseHour = gameTimeMinutes / 60; 
             hours = Math.floor(preciseHour);
             minutes = Math.floor(gameTimeMinutes % 60);
 
             if (minutes !== lastDisplayMin) {
-                document.getElementById("time-display").textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                DOM.time.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
                 lastDisplayMin = minutes;
             }
 
-            // 콤보 타이머
+            // 콤보 & 피버 타임 관리
             if (comboTimeLeft > 0) {
                 let decayRate = 1 + Math.min(4, comboCount / 50); 
                 comboTimeLeft -= decayRate;
                 let widthPercent = Math.max(0, (comboTimeLeft / 300) * 100);
-                document.getElementById("combo-bar").style.width = widthPercent + "%";
+                DOM.comboBar.style.width = widthPercent + "%";
                 if (comboTimeLeft <= 0) resetCombo();
             }
-
-            // 피버 타임
             if (isFeverTime) {
                 feverTimeLeft--;
                 if (feverTimeLeft <= 0) {
@@ -3889,11 +4219,11 @@
                 }
             }
 
-            // 랜덤 이벤트 (별똥별, 번개)
-            if (Math.random() < 0.002) spawnShootingStar(); 
+            // 랜덤 이벤트 (별똥별: 화려한 그래픽 ON일 때만 / 번개: 항상)
+            if (GRAPHICS.fancyGraphics && Math.random() < 0.002) spawnShootingStar(); 
             if (currentWeather.id === "thunder" && Math.random() < 0.002) triggerLightning();
 
-            // 날씨 및 파티클 수치 보간 (부드러운 전환)
+            // 날씨 보간 (부드러운 전환)
             currentFog += (targetFog - currentFog) * 0.005;      
             currentSnow += (targetSnow - currentSnow) * 0.002;   
             currentParticleCount += (targetParticleCount - currentParticleCount) * 0.01; 
@@ -3904,11 +4234,9 @@
                 for(let i=0; i<spawnAmount; i++) spawnWeatherParticle();
             }
 
-            // 글로벌 시간 및 카메라 물리 연산
-            globalRenderTime += 1; 
-            windTime += 0.05; 
-
-            // 플레이어 물리 이동 (키 입력)
+            // -----------------------------------------------------
+            // [2] 물리 연산 (플레이어 & 카메라)
+            // -----------------------------------------------------
             if (keys.left) { player.vx -= player.accel; player.facingRight = false; player.walkFrame++; }
             if (keys.right) { player.vx += player.accel; player.facingRight = true; player.walkFrame++; }
             if (!keys.left && !keys.right) { player.walkFrame = 0; }
@@ -3917,218 +4245,253 @@
             player.vx *= player.friction;
             player.x += player.vx;
             
-            // 맵 경계 처리
-            if (player.x < 30) player.x = 30;
+            // 맵 경계
+            if (player.x < 30) player.x = 30; 
             if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
             
-            // 높이 처리
+            // 지형 높이
             player.y = getGroundY(player.x); 
 
-            // 카메라 타겟 계산 (부드러운 추적)
+            // 카메라 추적
             targetCameraX = Math.max(0, Math.min(player.x - W / 2, WORLD_WIDTH - W));
             cameraX += (targetCameraX - cameraX) * 0.1;
             
-            // 시차(Parallax) 배경용 Y좌표 계산
+            // 시차 배경 계산
             currentParallaxX += (targetParallaxX - currentParallaxX) * 0.05; 
-            
             let playerSlopeY = (player.y - H * 0.85) / 50; 
             targetParallaxY = mouseParallaxY + playerSlopeY;
             currentParallaxY += (targetParallaxY - currentParallaxY) * 0.05; 
 
-            updateScarfPhysics(); // 머플러 물리
+            updateScarfPhysics(); // 머플러
 
             // -----------------------------------------------------
-            // [2] 배경(Background) 렌더링 (카메라 변환 전)
+            // [3] 배경 렌더링 (하늘)
             // -----------------------------------------------------
             ctx.clearRect(0, 0, W, H); 
 
-            // 하늘 그라데이션
             let targetSky = getCurrentSkyColors(preciseHour);
+            let tTop = targetSky.top;
+            let tBot = targetSky.bot;
+
             if (!isSkyInitialized) {
-                currentSkyTop = [...targetSky.top]; currentSkyBot = [...targetSky.bot];
+                currentSkyTop = [...tTop]; currentSkyBot = [...tBot];
                 isSkyInitialized = true;
             } else {
                 for(let i=0; i<3; i++) {
-                    currentSkyTop[i] += (targetSky.top[i] - currentSkyTop[i]) * 0.015;
-                    currentSkyBot[i] += (targetSky.bot[i] - currentSkyBot[i]) * 0.015;
+                    currentSkyTop[i] += (tTop[i] - currentSkyTop[i]) * 0.015;
+                    currentSkyBot[i] += (tBot[i] - currentSkyBot[i]) * 0.015;
                 }
             }
-            let grad = ctx.createLinearGradient(0, 0, 0, H);
-            grad.addColorStop(0, `rgb(${Math.round(currentSkyTop[0])},${Math.round(currentSkyTop[1])},${Math.round(currentSkyTop[2])})`);
-            grad.addColorStop(1, `rgb(${Math.round(currentSkyBot[0])},${Math.round(currentSkyBot[1])},${Math.round(currentSkyBot[2])})`);
-            ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
 
-            // 천체 및 구름
+            // ★ [옵션] 하늘 그라데이션 여부
+            if (GRAPHICS.fancyGraphics) {
+                let grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, `rgb(${Math.round(currentSkyTop[0])},${Math.round(currentSkyTop[1])},${Math.round(currentSkyTop[2])})`);
+                grad.addColorStop(1, `rgb(${Math.round(currentSkyBot[0])},${Math.round(currentSkyBot[1])},${Math.round(currentSkyBot[2])})`);
+                ctx.fillStyle = grad; 
+            } else {
+                ctx.fillStyle = `rgb(${Math.round((currentSkyTop[0]+currentSkyBot[0])/2)}, ${Math.round((currentSkyTop[1]+currentSkyBot[1])/2)}, ${Math.round((currentSkyTop[2]+currentSkyBot[2])/2)})`;
+            }
+            ctx.fillRect(0, 0, W, H);
+
+            // 천체 투명도 계산
             let shouldHideSky = (currentWeather.id === "cloudy" || currentWeather.id === "foggy" || currentWeather.id === "thunder" || currentWeather.id === "glitch");
             targetSkyAlpha = shouldHideSky ? 0 : 1;
             currentSkyAlpha += (targetSkyAlpha - currentSkyAlpha) * 0.02;
+            let fogRgb = [200, 210, 220]; 
+            let starOpacity = (hours < 5 || hours > 19 ? 1 : (hours >= 18 ? (hours-18) : (5-hours))) * currentSkyAlpha; 
 
-            // ... (천체 렌더링 - 별, 해, 달, 구름은 기존 함수나 로직이 길어서 생략되었으나 원래 있던 위치입니다)
-            // [참고] 기존에 있던 별/해/달/구름 그리는 코드가 여기에 포함되어야 합니다.
-            // (코드 복잡성을 줄이기 위해 핵심 로직 위주로 재작성했습니다)
+            // ★ [옵션] 별 렌더링
+            if (GRAPHICS.fancyGraphics && starOpacity > 0.05) { 
+                stars.forEach(s => { 
+                    ctx.fillStyle = `rgba(255,255,255,${s.alpha * starOpacity})`; 
+                    ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); 
+                    s.alpha += (Math.random() - 0.5) * 0.05; 
+                    if (s.alpha < 0) s.alpha = 0; if (s.alpha > 1) s.alpha = 1; 
+                }); 
+            } 
 
-            // 지형 및 날씨 레이어 (Parallax 적용됨)
+            // 해/달/구름 등 천체 렌더링 (기존 로직 유지)
+            if (currentSkyAlpha > 0.05) { 
+                // ... (천체 위치 계산)
+                let dayAngle = ((preciseHour - 6) / 24) * Math.PI * 2;
+                let sunX = W/2 - Math.cos(dayAngle) * W * 0.4;
+                let sunY = H * 0.45 - Math.sin(dayAngle) * H * 0.35;
+                let moonAngle = ((preciseHour + 6) / 24) * Math.PI * 2;
+                let moonX = W/2 - Math.cos(moonAngle) * W * 0.4;
+                let moonY = H * 0.45 - Math.sin(moonAngle) * H * 0.35;
+
+                if (currentWeather.id === "glitch") {
+                    ctx.save(); ctx.translate(W/2, H * 0.25); ctx.rotate(globalRenderTime * 0.05); 
+                    ctx.scale(1.0 + Math.sin(globalRenderTime * 0.1) * 0.2, 1.0 + Math.cos(globalRenderTime * 0.1) * 0.2); 
+                    drawStar(ctx, 0, 0, 8, 120, 60, "#ff003c"); 
+                    ctx.rotate(-globalRenderTime * 0.1); drawMagicCircle(ctx, 0, 0, 80, 0, "#00ffff", 0.8); ctx.restore();
+                } else if (preciseHour >= 6 && preciseHour <= 18) { 
+                    if (currentWeather.id === "eclipse") {
+                        ctx.save(); ctx.translate(sunX, sunY);
+                        let pulse = 1 + Math.sin(globalRenderTime * 0.05) * 0.1;
+                        let coronaGrad = ctx.createRadialGradient(0, 0, 65, 0, 0, 200 * pulse);
+                        coronaGrad.addColorStop(0, "rgba(255, 100, 0, 0.8)"); coronaGrad.addColorStop(1, "transparent");
+                        ctx.fillStyle = coronaGrad; ctx.beginPath(); ctx.arc(0, 0, 200 * pulse, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 50 * currentSkyAlpha; ctx.shadowColor = "#ff2200"; ctx.fillStyle = "#080000"; ctx.beginPath(); ctx.arc(0, 0, 68, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 30; ctx.shadowColor = "#ffff00"; ctx.fillStyle = "#ff8c00"; ctx.beginPath(); ctx.ellipse(0, 0, 20, 55, 0, 0, TWO_PI); ctx.fill();
+                        ctx.fillStyle = "#ffffcc"; ctx.beginPath(); ctx.ellipse(0, 0, 6, 45, 0, 0, TWO_PI); ctx.fill(); ctx.restore();
+                    } else {
+                        let sunGrad = ctx.createRadialGradient(sunX, sunY, 50, sunX, sunY, 300);
+                        sunGrad.addColorStop(0, `rgba(${targetSky.sun[0]}, ${targetSky.sun[1]}, ${targetSky.sun[2]}, ${currentSkyAlpha * 0.4})`);
+                        sunGrad.addColorStop(1, 'transparent');
+                        ctx.fillStyle = sunGrad; ctx.beginPath(); ctx.arc(sunX, sunY, 300, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 50 * currentSkyAlpha; ctx.shadowColor = `rgb(${targetSky.sun[0]},${targetSky.sun[1]},${targetSky.sun[2]})`; 
+                        ctx.fillStyle = `rgba(255, 255, 255, ${currentSkyAlpha})`; ctx.beginPath(); ctx.arc(sunX, sunY, 55, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; 
+                    }
+                }
+                if (preciseHour < 6 || preciseHour > 18) { 
+                    if (currentWeather.id === "blood-moon") {
+                        ctx.save(); ctx.translate(moonX, moonY); ctx.rotate(globalRenderTime * 0.001);
+                        let bodyGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 150);
+                        bodyGrad.addColorStop(0, "#ff4d4d"); bodyGrad.addColorStop(1, "#3d0000");
+                        ctx.fillStyle = bodyGrad; ctx.beginPath(); ctx.arc(0, 0, 150, 0, Math.PI * 2); ctx.fill();
+                        // (눈알 그리는 내부 코드 생략 - 원본 사용)
+                        ctx.shadowBlur = 60 * currentSkyAlpha; ctx.shadowColor = "#ff0000"; ctx.strokeStyle = "rgba(255, 50, 50, 0.3)"; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(0, 0, 148, 0, TWO_PI); ctx.stroke(); ctx.restore();
+                    } else {
+                        let moonColor = [240, 240, 255];
+                        let moonGrad = ctx.createRadialGradient(moonX, moonY, 40, moonX, moonY, 150);
+                        moonGrad.addColorStop(0, `rgba(${moonColor[0]}, ${moonColor[1]}, ${moonColor[2]}, ${currentSkyAlpha * 0.3})`); moonGrad.addColorStop(1, 'transparent');
+                        ctx.fillStyle = moonGrad; ctx.beginPath(); ctx.arc(moonX, moonY, 150, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 30 * currentSkyAlpha; ctx.shadowColor = `rgb(${moonColor.join(',')})`; ctx.fillStyle = `rgba(${moonColor.join(',')}, ${currentSkyAlpha})`;
+                        ctx.beginPath(); ctx.arc(moonX, moonY, 40, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; 
+                    }
+                } 
+            }
+            if (GRAPHICS.showClouds) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${currentWeather.id === "cloudy" ? 0.3 : 0.1})`;
+                clouds.forEach(c => {
+                    ctx.beginPath(); ctx.arc(c.x, c.y, c.size, 0, TWO_PI);
+                    ctx.arc(c.x + c.size*0.7, c.y - c.size*0.3, c.size*0.8, 0, TWO_PI);
+                    ctx.arc(c.x + c.size*1.4, c.y, c.size, 0, TWO_PI); ctx.fill();
+                    c.x += c.speed * (currentWeather.id === "wind" || currentWeather.id === "cloudy" ? 3 : 1);
+                    if(c.x > W + c.size * 2) c.x = -c.size * 2;
+                });
+            }
+
+            // -----------------------------------------------------
+            // [4] 지형 (Parallax) 렌더링
+            // -----------------------------------------------------
+            // 순서: 먼 곳 -> 가까운 곳
+            renderRuins(fogRgb, 0.0, 0.16); 
             renderLand(landscapes[0], 0, fogRgb); renderWeatherLayer(0.1, 0.2); 
+            renderRuins(fogRgb, 0.16, 0.36); 
             renderLand(landscapes[1], 1, fogRgb); renderWeatherLayer(0.2, 0.4); 
-            renderLand(landscapes[2], 2, fogRgb); renderTrees(2, fogRgb); renderWeatherLayer(0.4, 0.7); 
+            renderRuins(fogRgb, 0.36, 0.71);
+            renderTrees(2, fogRgb);
+            renderLand(landscapes[2], 2, fogRgb); renderWeatherLayer(0.4, 0.7); 
+            renderRuins(fogRgb, 0.71, 2.0);
             renderLand(landscapes[3], 3, fogRgb); 
             if (GRAPHICS.showGrass) renderGrass(fogRgb); 
-            renderWeatherLayer(0.7, 1.0); 
+            renderWeatherLayer(0.7, 1.0);
 
-            // 배경 이펙트 (별똥별, 번개, 스폰 아이템, VFX 파티클)
-            renderShootingStars(ctx);
-            renderLightning(ctx);
-            
+            // ★ [추가] 지역(Biome) 체크 및 알림
+            if (typeof BIOMES !== 'undefined') {
+                let newBiomeIdx = Math.floor(Math.max(0, player.x) / 5000);
+                if (newBiomeIdx >= BIOMES.length) newBiomeIdx = BIOMES.length - 1;
+                if (newBiomeIdx !== currentBiomeIndex) {
+                    currentBiomeIndex = newBiomeIdx;
+                    let bData = BIOMES[currentBiomeIndex];
+                    showSideNotification("NEW REGION", bData.name, "#00E5FF");
+                }
+            }
+
             // -----------------------------------------------------
-            // [3] 월드 오브젝트 렌더링 (카메라 변환 적용)
+            // [5] 월드 오브젝트 (카메라 적용)
             // -----------------------------------------------------
             ctx.save();
             ctx.translate(-cameraX, -currentParallaxY * 50); 
+            
+            // 화면 밖 컬링을 위한 좌표 계산
+            let screenLeft = cameraX - 200;
+            let screenRight = cameraX + W + 200;
 
-            // 렌더링 최적화를 위한 화면 범위 계산
-            let screenLeft = cameraX;
-            let screenRight = cameraX + W;
-            let fadeWidth = 150;
-
-            // (3-1) 투사체 렌더링 & 충돌 판정 (★통합됨)
+            // (5-1) 투사체 & 충돌 로직
             for (let j = projectiles.length - 1; j >= 0; j--) {
                 let p = projectiles[j];
                 
-                // 1. 유효성 검사
+                // 유효성 검사 및 업데이트
                 p.life -= (p.type === 3 || p.type === 6) ? 0.12 : 0.025; 
                 p.x += p.vx || 0; p.y += p.vy || 0;
 
                 if (p.life <= 0) { projectiles.splice(j, 1); continue; }
                 if (p.type !== 3 && p.type !== 6) {
-                     if (p.x < screenLeft || p.x > screenRight) continue;
+                    if (p.x < screenLeft || p.x > screenRight) continue; // 화면 밖 무시
                 }
 
-                // 2. 그리기 전 준비
-                let px = p.x, py = p.y, size = p.size || 30, color = p.color || "#FFF", angle = p.angle || 0;
-                let edgeAlpha = 1.0;
-                if (px < screenLeft + fadeWidth) edgeAlpha = (px - screenLeft) / fadeWidth;
-                else if (px > screenRight - fadeWidth) edgeAlpha = (screenRight - px) / fadeWidth;
-                edgeAlpha = Math.max(0, Math.min(1, edgeAlpha));
-                let finalAlpha = Math.max(0, p.life) * edgeAlpha;
-
-                if (finalAlpha <= 0) {
-                    if (Math.abs(px - player.x) > W) projectiles.splice(j, 1);
-                    continue;
-                }
-
-                // 3. 투사체 그리기 (간소화 옵션 적용)
-                ctx.save();
-                ctx.translate(px, py); ctx.rotate(angle); ctx.globalAlpha = finalAlpha;
-
-                if (!GRAPHICS.simpleProjectiles) {
-                    ctx.globalCompositeOperation = 'lighter'; 
-                    if (p.type !== 6) { ctx.shadowBlur = 15; ctx.shadowColor = color; }
-                } else {
-                    ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0; 
-                }
-
-                // (티어별 그리기 로직은 동일하므로 핵심만 남김)
-                if(p.type===1) {
-                    if (!GRAPHICS.simpleProjectiles) { let grad = ctx.createLinearGradient(0,0,-size*4,0); grad.addColorStop(0,color); grad.addColorStop(1,"transparent"); ctx.fillStyle=grad; } else ctx.fillStyle=color;
-                    ctx.beginPath(); ctx.moveTo(size,0); ctx.lineTo(-size*4,-size*0.3); ctx.lineTo(-size*4,size*0.3); ctx.fill();
-                    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,0,size*0.4,0,TWO_PI); ctx.fill();
-                } else if(p.type===2) {
-                    if(!GRAPHICS.simpleProjectiles) { /* 잔상생략 */ }
-                    ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(-size, size*0.5); ctx.bezierCurveTo(-size*0.5,-size*1.2,size*0.5,-size*1.2,size,0); ctx.bezierCurveTo(size*0.5,-size*0.6,-size*0.5,-size*0.6,-size,size*0.5); ctx.fill();
-                } else if(p.type===3) {
-                     let len = p.length||1500; let w = p.width||90;
-                     ctx.fillStyle=color; ctx.fillRect(0,-w/2,len,w); ctx.fillStyle="#fff"; ctx.fillRect(0,-w/6,len,w/3);
-                } else if(p.type===4) {
-                     ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(size*2,0); ctx.lineTo(-size*0.5,-size*0.5); ctx.lineTo(-size*0.5,size*0.5); ctx.fill();
-                } else if(p.type===5) {
-                     let outer=size*1.4; let inner=size*0.7;
-                     if(!GRAPHICS.simpleProjectiles) { /* 후광생략 */ }
-                     ctx.lineWidth=6; ctx.strokeStyle=color; 
-                     for(let j=0; j<4; j++) { ctx.beginPath(); ctx.arc(0,0,outer,(TWO_PI/4)*j+0.3,(TWO_PI/4)*(j+1)-0.3); ctx.stroke(); }
-                     ctx.lineWidth=8; ctx.stroke(); ctx.beginPath(); ctx.arc(0,0,inner,0,TWO_PI); ctx.stroke();
-                } else if(p.type===6) {
-                    let len = p.length || 3000; let w = p.width || 550;
-                    if(!GRAPHICS.simpleProjectiles) {
-                        ctx.globalCompositeOperation='difference'; ctx.fillStyle="#fff"; ctx.fillRect(0,-w/2,len,w);
-                        ctx.globalCompositeOperation='lighter'; ctx.strokeStyle=color; ctx.lineWidth=10; 
-                        for(let k=0; k<3; k++) { ctx.beginPath(); ctx.moveTo(0,(Math.random()-0.5)*w); ctx.lineTo(len,(Math.random()-0.5)*200); ctx.stroke(); }
-                    } else {
-                        ctx.globalCompositeOperation='source-over'; ctx.fillStyle="#eee"; ctx.fillRect(0,-w/2,len,w);
-                    }
-                    ctx.fillStyle="#000"; ctx.fillRect(0,-w/10,len,w/5);
-                }
+                // 그리기 (옵션 적용)
+                let finalAlpha = Math.max(0, p.life);
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle||0); ctx.globalAlpha = finalAlpha;
+                if(!GRAPHICS.simpleProjectiles) { ctx.globalCompositeOperation = 'lighter'; if(p.type!==6) { ctx.shadowBlur=15; ctx.shadowColor=p.color; } }
+                else { ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur=0; }
+                
+                // (투사체 타입별 그리기 코드 - 기존 코드 내장)
+                let size = p.size || 30; let color = p.color || "#FFF";
+                if(p.type===1) { ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(size,0); ctx.lineTo(-size*4,-size*0.3); ctx.lineTo(-size*4,size*0.3); ctx.fill(); ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,0,size*0.4,0,TWO_PI); ctx.fill(); }
+                else if(p.type===2) { ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(-size,size*0.5); ctx.bezierCurveTo(-size*0.5,-size*1.2,size*0.5,-size*1.2,size,0); ctx.bezierCurveTo(size*0.5,-size*0.6,-size*0.5,-size*0.6,-size,size*0.5); ctx.fill(); ctx.fillStyle="#fff"; ctx.beginPath(); ctx.moveTo(-size*0.6,size*0.2); ctx.bezierCurveTo(-size*0.2,-size*0.9,size*0.2,-size*0.9,size*0.7,-size*0.1); ctx.bezierCurveTo(size*0.2,-size*0.7,-size*0.2,-size*0.7,-size*0.6,size*0.2); ctx.fill(); }
+                else if(p.type===3) { ctx.fillStyle=color; ctx.fillRect(0,-(p.width||90)/2,p.length||1500,p.width||90); ctx.fillStyle="#fff"; ctx.fillRect(0,-(p.width||90)/6,p.length||1500,(p.width||90)/3); }
+                else if(p.type===4) { ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(size*2,0); ctx.lineTo(-size*0.5,-size*0.5); ctx.lineTo(-size*0.5,size*0.5); ctx.fill(); ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-size,0); ctx.lineTo(size*2.5,0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(size*0.5,-size); ctx.lineTo(size*0.5,size); ctx.stroke(); }
+                else if(p.type===5) { let o=size*1.4; if(!GRAPHICS.simpleProjectiles) { let g=ctx.createRadialGradient(0,0,size*0.5,0,0,o*1.5); g.addColorStop(0,color); g.addColorStop(1,"transparent"); ctx.fillStyle=g; ctx.globalAlpha=finalAlpha*0.3; ctx.beginPath(); ctx.arc(0,0,o*1.5,0,TWO_PI); ctx.fill(); } ctx.globalAlpha=finalAlpha; ctx.lineWidth=6; ctx.strokeStyle=color; ctx.beginPath(); ctx.arc(0,0,o,0,TWO_PI); ctx.stroke(); ctx.lineWidth=2; ctx.strokeStyle="#fff"; ctx.stroke(); }
+                else if(p.type===6) { ctx.fillStyle="#eee"; ctx.fillRect(0,-(p.width||550)/2,p.length||3000,p.width||550); ctx.fillStyle="#000"; ctx.fillRect(0,-(p.width||550)/10,p.length||3000,(p.width||550)/5); }
                 ctx.restore();
 
-                // 4. ★ 충돌 판정 (하나로 통합)
+                // 몬스터 충돌 체크
                 for (let k = 0; k < critters.length; k++) {
                     let c = critters[k];
-                    
-                    // 최적화 및 꼼수 방지
-                    if (c.x < screenLeft - 100 || c.x > screenRight + 100) continue;
-                    if (Math.abs(c.x - player.x) > 1300) continue;
-                    if (c.hitTime > 0) continue;
-                    if (p.type === 5 && p.hitMobiles && p.hitMobiles.includes(c.id)) continue;
+                    if (c.x < screenLeft || c.x > screenRight) continue; // 화면 밖 몹 패스
+                    if (Math.abs(c.x - player.x) > 1300) continue; // 너무 먼 몹 패스
+                    if (c.hitTime > 0) continue; // 무적 패스
+                    if (p.type === 5 && p.hitMobiles && p.hitMobiles.includes(c.id)) continue; // 차크람 중복 패스
 
                     let isHit = false;
-                    const cSize = Number(c.typeData.size) || 15;
-
-                    if (p.type === 3 || p.type === 6) {
-                        let x2 = p.x + Math.cos(p.angle) * (p.length || 1000);
-                        let y2 = p.y + Math.sin(p.angle) * (p.length || 1000);
+                    let cSize = Number(c.typeData.size) || 15;
+                    if (p.type === 3 || p.type === 6) { // 레이저
+                        let x2 = p.x + Math.cos(p.angle)*(p.length||1000); let y2 = p.y + Math.sin(p.angle)*(p.length||1000);
                         let dist = distToSegment({x: c.x, y: c.y}, {x: p.x, y: p.y}, {x: x2, y: y2});
-                        if (dist < (p.width || 100) / 2 + cSize) isHit = true;
-                    } else {
-                        let distSq = (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
-                        let radiusSum = cSize + (p.size || 20);
-                        if (distSq < radiusSum * radiusSum) isHit = true;
+                        if (dist < (p.width||100)/2 + cSize) isHit = true;
+                    } else { // 원형
+                        let distSq = (p.x - c.x)**2 + (p.y - c.y)**2;
+                        if (distSq < (cSize + (p.size||20))**2) isHit = true;
                     }
 
                     if (isHit) {
-                        if (globalRenderTime % 6 === 0 || !GRAPHICS.simpleProjectiles) {
-                             if(sfxSuccess.paused || sfxSuccess.ended) playSound(sfxSuccess); 
-                        }
-                        
-                        const baseDamage = (p.rarity || 1) / 2000;
-                        let finalDamage = baseDamage;
-                        if(p.type === 1) finalDamage = finalDamage * 0.3;
-                        if(p.type === 2) finalDamage = finalDamage * 0.2;
-                        if(p.type === 4) finalDamage = finalDamage * 0.25;
-                        if (p.type === 5) finalDamage = finalDamage * 0.5;
-                        if (p.type === 6) finalDamage = Math.max(999, baseDamage);
-
-                        c.hp -= finalDamage; 
-                        c.hitTime = 10; 
-                        c.x += Math.cos(p.angle || 0) * 5; 
-
                         if (!GRAPHICS.simpleProjectiles) {
+                            if(sfxSuccess.paused || sfxSuccess.ended) playSound(sfxSuccess);
                             let pCount = (p.type === 5) ? 3 : 8;
                             vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", pCount, 5);
-                            if (p.type === 5) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#00E5FF", 3, 10);
                         }
+                        
+                        let dmg = (p.rarity || 1) / 2000;
+                        if(p.type===6) dmg = Math.max(999, dmg); // 차원베기 극딜
+                        c.hp -= dmg;
+                        c.hitTime = 10;
+                        c.x += Math.cos(p.angle || 0) * 5;
 
                         if (p.type === 5) {
                             if (!p.hitMobiles) p.hitMobiles = [];
                             p.hitMobiles.push(c.id);
                         } else if (p.type !== 3 && p.type !== 6) {
-                            p.life = 0; 
+                            p.life = 0; // 일반 투사체 소멸
                         }
-                        
-                        if (c.hp <= 0) break; 
-                        break; 
+                        break; // 한 투사체는 한 프레임에 하나의 적만 타격 (레이저 제외해야 하지만 편의상)
                     }
                 }
-            } // 투사체 루프 끝
+            }
 
-            // (3-2) 다른 플레이어 렌더링
+            // (5-2) 다른 플레이어
             for (const [id, pData] of Object.entries(otherPlayers)) {
-                if (pData.x > cameraX - 100 && pData.x < cameraX + W + 100) {
+                if (pData.x > screenLeft && pData.x < screenRight) {
                     ctx.save(); ctx.translate(pData.x, getGroundY(pData.x));
                     drawOtherPlayer(ctx, pData); ctx.restore();
                 }
             }
 
-            // (3-3) 내 캐릭터 렌더링
-            // 머플러 (뒤)
+            // (5-3) 내 캐릭터 (머플러 + 몸)
             ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.shadowBlur = 5; ctx.shadowColor = "#ff416c";
             for(let j=0; j<2; j++) {
                 ctx.lineWidth = j === 0 ? 10 : 5;
@@ -4137,21 +4500,15 @@
                 for (let i = 1; i < player.scarfSegments.length; i++) ctx.lineTo(player.scarfSegments[i].x, player.scarfSegments[i].y);
                 ctx.stroke();
             }
-            // 몸통
             ctx.save(); ctx.translate(player.x, player.y); drawPlayer(ctx); ctx.restore();
 
-            // (3-4) 몬스터 스폰 및 렌더링
+            // (5-4) 몬스터 스폰 및 렌더링
             if (globalRenderTime % 180 === 0 && critters.length < 12 && Math.random() < 0.6) {
-                let weatherId = currentWeather.id;
-                let cData = CRITTER_DB[weatherId] || CRITTER_DB["clear"];
+                let cData = CRITTER_DB[currentWeather.id] || CRITTER_DB["clear"];
                 let dir = Math.random() < 0.5 ? 1 : -1;
                 let rDist = CRITTER_MIN_SPAWN_DIST + Math.random() * (CRITTER_MAX_SPAWN_DIST - CRITTER_MIN_SPAWN_DIST);
-                let startX = Math.max(30, Math.min(player.x + (dir * rDist), WORLD_WIDTH - 30));
-                critters.push({ 
-                    id: Date.now() + Math.random(), x: startX, y: getGroundY(startX), 
-                    vx: (Math.random() - 0.5) * cData.speed, typeData: cData, 
-                    hp: cData.hp, maxHp: cData.hp, hitTime: 10, life: 1800, animTime: Math.random() * 100 
-                });
+                let sx = Math.max(30, Math.min(player.x + (dir * rDist), WORLD_WIDTH - 30));
+                critters.push({ id: Date.now()+Math.random(), x: sx, y: getGroundY(sx), vx: (Math.random()-0.5)*cData.speed, typeData: cData, hp: cData.hp, maxHp: cData.hp, hitTime: 10, life: 1800, animTime: Math.random()*100 });
             }
 
             for (let i = critters.length - 1; i >= 0; i--) {
@@ -4159,88 +4516,82 @@
                 c.life--; c.animTime += 0.1;
                 if (c.hitTime > 0) c.hitTime--;
 
-                // AI 이동 (간단화)
-                if (Math.random() < 0.01) c.vx = (Math.random() - 0.5) * c.typeData.speed; 
-                if (c.typeData.moveType === "dash" && Math.random() < 0.015) c.vx *= 1.8; 
-                if (c.typeData.moveType === "glitch" && Math.random() < 0.1) c.x += (Math.random()-0.5)*100; 
+                // AI
+                if (Math.random() < 0.01) c.vx = (Math.random() - 0.5) * c.typeData.speed;
+                if (c.typeData.moveType === "dash" && Math.random() < 0.015) c.vx *= 1.8;
                 c.x = Math.max(30, Math.min(c.x + c.vx, WORLD_WIDTH - 30));
-                
                 let gY = getGroundY(c.x);
                 c.y = c.typeData.moveType === "float" ? c.y + (gY - 50 - c.y) * 0.05 + Math.sin(c.animTime)*0.5 : gY;
 
-                // 사망 처리
+                // 사망/소멸
                 if (c.life <= 0) { critters.splice(i, 1); continue; }
                 if (c.hp <= 0) {
                     playSound(sfxStar);
                     let drop = c.typeData.drop; consumableInv[drop] = (consumableInv[drop] || 0) + 1; saveGame();
-                    // 간소화 체크하여 파티클 생성
-                    if (!GRAPHICS.simpleProjectiles) {
-                        vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 15, 8);
-                    }
-                    critters.splice(i, 1); continue; 
+                    if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
+                    critters.splice(i, 1); continue;
                 }
 
                 // 렌더링
-                if (c.x > cameraX - 50 && c.x < cameraX + W + 50) {
+                if (c.x > screenLeft && c.x < screenRight) {
                     let bounce = (c.typeData.moveType === "hop") ? Math.abs(Math.sin(c.animTime)) * 10 : 0;
-                    let hRatio = c.typeData.uiHeight || 3.0;
-                    let uiY = -(c.typeData.size * hRatio); 
+                    let uiY = -(c.typeData.size * (c.typeData.uiHeight || 3.0));
+                    ctx.save(); ctx.translate(c.x, c.y - bounce);
                     
-                    ctx.save();
-                    ctx.translate(c.x, c.y - bounce);
-
+                    // UI
                     ctx.fillStyle = "white"; ctx.shadowBlur = 3; ctx.shadowColor = "black";
                     ctx.font = "bold 12px Noto Sans KR"; ctx.textAlign = "center";
                     ctx.fillText(c.typeData.name, 0, uiY - 15); ctx.shadowBlur = 0;
-
                     let hpPct = Math.max(0, c.hp / c.maxHp);
-                    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(-15, uiY, 30, 4); 
-                    ctx.fillStyle = hpPct > 0.4 ? "#38ef7d" : "#ff416c"; ctx.fillRect(-15, uiY, 30 * hpPct, 4); 
+                    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(-15, uiY, 30, 4);
+                    ctx.fillStyle = hpPct > 0.4 ? "#38ef7d" : "#ff416c"; ctx.fillRect(-15, uiY, 30 * hpPct, 4);
 
                     if (c.vx < 0) ctx.scale(-1, 1);
-                    drawCritterSprite(ctx, c); 
+                    drawCritterSprite(ctx, c);
                     ctx.restore();
                     
-                    c.screenX = c.x - cameraX; c.screenY = c.y - bounce - currentParallaxY * 50; 
+                    c.screenX = c.x - cameraX; c.screenY = c.y - bounce - currentParallaxY * 50;
                 }
             }
 
-            // 아이템 렌더링
+            // 아이템, VFX
             renderSpawns(ctx);
-            vfxParticles.updateAndDraw(ctx); 
+            vfxParticles.updateAndDraw(ctx);
 
-            ctx.restore(); // 월드 좌표계 끝
+            if (GRAPHICS.fancyGraphics) {
+                renderShootingStars(ctx);
+            }
+            renderLightning(ctx); // 번개는 날씨라 놔둠
+
+            ctx.restore(); // [월드 좌표계 끝]
 
             // -----------------------------------------------------
-            // [4] 오버레이 & 네트워크
+            // [6] 오버레이 (UI 하단)
             // -----------------------------------------------------
             let fogAlpha = currentWeather.id === "foggy" ? Math.min(0.5, currentFog) : (currentFog * 0.3);
-            document.getElementById("fog-overlay").style.background = `rgba(${fogRgb[0]}, ${fogRgb[1]}, ${fogRgb[2]}, ${fogAlpha})`; 
-            
-            // 환경 입자 그리기 (맨 위 레이어)
-            let ambientColor = (hours < 6 || hours > 18) ? "#b3e5fc" : (currentWeather.id === "clear" ? "#FFD700" : "#ffffff");
-            ctx.fillStyle = ambientColor;
-            window.ambientParticles.forEach(p => {
-                p.x += p.vx + (currentWeather.id === "wind" ? 2 : 0); 
-                p.y += p.vy;
-                if(p.x < 0) p.x = W; if(p.x > W) p.x = 0; if(p.y < 0) p.y = H; if(p.y > H) p.y = 0;
-                ctx.globalAlpha = p.alpha * (0.3 + Math.sin(globalRenderTime * 0.02 + p.x) * 0.2);
-                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-            });
-            ctx.globalAlpha = 1.0;
+            DOM.fogOverlay.style.background = `rgba(${fogRgb[0]}, ${fogRgb[1]}, ${fogRgb[2]}, ${fogAlpha})`; 
 
-            // [최적화 2] 움직임이 거의 없으면 패킷 전송 중단 (서버 부하 감소)
+            // ★ [옵션] 맨 앞 반짝이
+            if (GRAPHICS.fancyGraphics) {
+                let ambientColor = (hours < 6 || hours > 18) ? "#b3e5fc" : (currentWeather.id === "clear" ? "#FFD700" : "#ffffff");
+                ctx.fillStyle = ambientColor;
+                window.ambientParticles.forEach(p => {
+                    p.x += p.vx + (currentWeather.id === "wind" ? 2 : 0); 
+                    p.y += p.vy;
+                    if(p.x < 0) p.x = W; if(p.x > W) p.x = 0; if(p.y < 0) p.y = H; if(p.y > H) p.y = 0;
+                    ctx.globalAlpha = p.alpha * (0.3 + Math.sin(globalRenderTime * 0.02 + p.x) * 0.2);
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+                });
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 네트워크 전송
             if (globalRenderTime % 3 === 0) { 
-                // 속도가 0.01 이상일 때만 전송 (서 있거나 아주 미세한 떨림은 무시)
                 if (Math.abs(player.vx) > 0.01 || keys.left || keys.right) {
-                    socket.emit('playerMove', { 
-                        x: player.x, y: player.y, vx: player.vx, facingRight: player.facingRight, 
-                        aura: equippedAuraName || "COMMON", nickname: myNickname 
-                    });
+                    socket.emit('playerMove', { x: player.x, y: player.y, vx: player.vx, facingRight: player.facingRight, aura: equippedAuraName || "COMMON", nickname: myNickname });
                 }
                 calcBuffs(); 
             }
-
             requestAnimationFrame(render); 
         }
 
@@ -4781,15 +5132,46 @@
                 });
             }
 
-            renderLand(landscapes[0], 0, fogRgb); renderWeatherLayer(0.1, 0.2); 
-            renderLand(landscapes[1], 1, fogRgb); renderWeatherLayer(0.2, 0.4); 
-            renderLand(landscapes[2], 2, fogRgb); renderTrees(2, fogRgb); renderWeatherLayer(0.4, 0.7); 
-            renderLand(landscapes[3], 3, fogRgb);
-            // ★ [수정] 풀 렌더링 설정 확인
+            // =======================================================
+            // ★ [수정됨] 배경 렌더링 순서 (뒤 -> 앞 순서 완벽 정리)
+            // =======================================================
+
+            // 1. [아주 먼 배경] 맨 뒷산 뒤의 거대 기둥 (Depth: 0.1 ~ 0.15)
+            // 안개에 거의 잠겨서 실루엣만 보여야 웅장함
+            renderRuins(fogRgb, 0.0, 0.16); 
+            
+            // 2. [원경] 맨 뒷산 (Depth: 0.15)
+            renderLand(landscapes[0], 0, fogRgb); 
+            renderWeatherLayer(0.1, 0.2); 
+
+            // 3. [중경 1] 뒷산과 앞산 사이의 기둥들 (Depth: 0.16 ~ 0.35)
+            // 산 사이에서 솟아오른 느낌
+            renderRuins(fogRgb, 0.16, 0.36); 
+
+            // 4. [중경 2] 앞산 (Depth: 0.35)
+            renderLand(landscapes[1], 1, fogRgb); 
+            renderWeatherLayer(0.2, 0.4); 
+
+            // 5. [근경 1] 앞산과 언덕 사이의 기둥들 (Depth: 0.36 ~ 0.7)
+            // 꽤 선명하게 보임
+            renderRuins(fogRgb, 0.36, 0.71);
+
+            renderTrees(2, fogRgb);
+            // 6. [근경 2] 언덕과 나무 (Depth: 0.7)
+            renderLand(landscapes[2], 2, fogRgb); 
+            renderWeatherLayer(0.4, 0.7); 
+
+            // 7. [전경] 플레이어 바로 뒤/옆에 있는 거대 기둥 (Depth: 0.71 이상)
+            // 플레이어가 지나갈 때 화면을 가리며 지나감 (입체감 극대화)
+            renderRuins(fogRgb, 0.71, 2.0);
+
+            // 8. [바닥] 플레이어가 밟는 땅 (Depth: 1.0)
+            renderLand(landscapes[3], 3, fogRgb); 
+            
             if (GRAPHICS.showGrass) {
                 renderGrass(fogRgb); 
             }
-            renderWeatherLayer(0.7, 1.0); 
+            renderWeatherLayer(0.7, 1.0);
 
             // =======================================================
             // ★ [최종 완성] 카메라를 적용한 월드 좌표계 통합 렌더링
@@ -5642,7 +6024,7 @@
                         setTimeout(() => { 
                             shakeIntensity = 20; applyScreenShake(); 
                             vfxParticles.spawnExplosion(W/2, H/2-100, currentResult.color, 50, 15); 
-                            restoreBGMWithImpact(); playSound(sfxSuccess); 
+                            restoreBGMWithImpact(); playSound(sfxSuccess); aa
                             document.getElementById("stage").style.opacity = 1; 
                             showFinalResult(); 
                         }, 1500); 
