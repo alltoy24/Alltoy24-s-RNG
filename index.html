@@ -1866,20 +1866,23 @@
         chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
         document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
 
-        // [수정] 서버에서 온 채팅 받기
+        // 채팅 수신 (스크롤 확실하게 처리)
         socket.on('receiveMessage', (data) => {
             const msgDiv = document.createElement("div");
             
-            // 데이터 검증: sender가 없으면 '익명의 유저'로 표시
-            const displayName = data.sender || "익명의 유저";
-            const displayColor = data.color || "#FFF";
-
-            msgDiv.innerHTML = `<b style="color:${displayColor};">[${displayName}]</b> ${data.text}`;
-            chatHistory.appendChild(msgDiv);
+            // 닉네임 색상 적용
+            msgDiv.innerHTML = `<b style="color:${data.color || '#FFF'};">[${data.sender || '익명'}]</b> <span style="color:#ddd;">${data.text}</span>`;
             
-            // 자동 스크롤 및 개수 제한
-            if (chatHistory.children.length > 50) chatHistory.removeChild(chatHistory.firstChild);
-            chatHistory.scrollTop = chatHistory.scrollHeight; 
+            const ch = document.getElementById("chat-history");
+            if(ch) { 
+                ch.appendChild(msgDiv); 
+                
+                // ★ 메시지 개수가 너무 많으면(100개) 위에서부터 지워서 렉 방지
+                if (ch.children.length > 100) ch.removeChild(ch.firstChild);
+
+                // ★ 스크롤을 맨 아래로 강제 이동
+                ch.scrollTop = ch.scrollHeight; 
+            }
         });
 
         socket.on('systemMessage', (data) => {
