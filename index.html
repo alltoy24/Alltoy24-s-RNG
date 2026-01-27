@@ -16,27 +16,24 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
-        /* [최종 수정] 모바일 전체화면 강제 고정 (핀 고정 방식) */
+        /* [수정 2] 모바일 전체화면 강제 고정 (dvh 단위 사용) */
         html, body {
-            /* 크기 지정이 아니라, 화면 4면 끝에 강제로 갖다 붙임 */
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            right: 0; 
-            bottom: 0;
-            
-            /* 스크롤 및 터치 동작 차단 */
             width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #000;
+            height: 100%;        /* 구형 브라우저 호환 */
+            height: 100dvh;      /* ★ 핵심: 주소창 제외한 실제 화면 높이 */
+            overflow: hidden;    /* 스크롤바 숨김 */
+            background: #000; 
             color: white;
             
+            /* 모바일 터치/확대 방지 */
             touch-action: none;
             overscroll-behavior: none;
             user-select: none;
             -webkit-user-select: none;
             
+            /* 위치 고정 */
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0;
             font-family: 'Noto Sans KR', sans-serif;
             cursor: crosshair;
             z-index: 0;
@@ -448,7 +445,7 @@
             user-select: none; -webkit-user-select: none;
             touch-action: manipulation; /* 확대/스크롤 방지 */
             transition: transform 0.1s, background 0.1s;
-        }ㅇ
+        }
 
         .touch-btn:active {
             background: rgba(255, 255, 255, 0.4);
@@ -578,6 +575,11 @@
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
+    <div id="rotate-warning">
+        <h1>⚠️ SCREEN ROTATION REQUIRED</h1>
+        <p>이 게임은 가로 모드(Landscape)에 최적화되어 있습니다.<br>기기를 회전시켜 주세요.</p>
+        <div style="font-size: 3rem; margin-top: 20px;">🔄</div>
+    </div>
 
     <canvas id="game-canvas"></canvas>
     <canvas id="vfx-canvas"></canvas>
@@ -4152,8 +4154,6 @@
             }); 
         }
 
-
-
         function spawnWeatherParticle() {
             let z = Math.random() * 0.9 + 0.1; 
             let startX = Math.random() * W;
@@ -6437,44 +6437,6 @@
             // ★ [수정 3] 여기에 추가하세요! (강제 리사이즈 실행)
             window.dispatchEvent(new Event('resize'));
         };
-
-        // 화면 아무데나 터치하면 '진짜 전체화면' 요청 (안드로이드 등에서 주소창 사라짐)
-        document.body.addEventListener('click', () => {
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen().catch(() => {});
-            }
-        }, { once: true }); // 딱 한 번만 실행
-
-        // ==========================================
-        // ★ [최종] 화면 크기 강제 동기화 (주소창 대응)
-        // ==========================================
-        function resizeScreen() {
-            // 브라우저의 실제 보이는 내부 높이를 가져옴
-            W = window.innerWidth;
-            H = window.innerHeight;
-
-            canvas.width = W;
-            canvas.height = H;
-            vfxCanvas.width = W;
-            vfxCanvas.height = H;
-
-            // 배경 재생성 (비율이 달라지면 다시 그려야 깨지지 않음)
-            // 너무 자주 실행되면 렉 걸리므로, 모바일이 아닐 때만 재생성하거나
-            // 그냥 위치만 조정하는 게 좋지만, 일단 꽉 채우는 게 우선이니 호출
-            if (typeof generateNature === 'function') generateNature();
-            
-            // 모바일에서 주소창 때문에 스크롤 생긴 경우 강제로 끌어올림
-            window.scrollTo(0, 0);
-        }
-
-        // 화면 크기가 변하거나, 가로/세로 회전할 때 무조건 실행
-        window.addEventListener('resize', resizeScreen);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(resizeScreen, 200); // 회전 직후 딜레이 보정
-        });
-
-        // 게임 시작 시 강제 실행
-        resizeScreen();
 
     </script>
 </body>
