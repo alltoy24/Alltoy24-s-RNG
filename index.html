@@ -532,6 +532,12 @@
             delete otherPlayers[id];
         });
 
+        // ★ [신규] 중복 접속 시 서버가 보낸 거절 신호 처리
+        socket.on('forceDisconnect', (msg) => {
+            alert(msg); // "이미 다른 탭에서 실행 중입니다" 경고
+            window.location.href = "about:blank"; // 강제 퇴장
+        });
+
         // ★ [멀티플레이 최적화] 상대방 공격 시작점 위치 보정 및 에러 해결
         socket.on('otherPlayerAttack', (data) => {
             // ★ [추가] 설정이 꺼져있으면 아예 생성하지 않음 (가장 확실한 최적화)
