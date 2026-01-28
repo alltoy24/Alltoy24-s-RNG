@@ -610,6 +610,94 @@
             to { opacity: 1; transform: translateX(0); }
         }
 
+        /* [수정] 상단 UI: 왼쪽 그룹과 오른쪽 그룹으로 분리 */
+        #top-ui { 
+            position: absolute; top: 20px; left: 20px; right: 20px; 
+            display: flex; justify-content: space-between; align-items: flex-start; 
+            pointer-events: none; /* 빈 공간 클릭 통과 */
+        }
+        
+        /* 왼쪽 그룹 (날씨 + 프로필) */
+        #top-left-group {
+            display: flex; 
+            align-items: flex-start; /* 위쪽 정렬 */
+            gap: 15px; /* 날씨창과 프로필 사이 간격 */
+            pointer-events: auto;
+        }
+
+        /* 오른쪽 그룹 (돈 + 메뉴) */
+        #top-right-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            pointer-events: auto;
+        }
+
+        /* [수정] 날씨 창 스타일 미세 조정 */
+        #time-weather-info { 
+            padding: 10px 20px; text-align: center; height: 80px; display: flex; flex-direction: column; justify-content: center;
+        }
+
+        /* [수정] 프로필 카드 디자인 (HP/XP 바 추가를 위해 크기 조정) */
+        #profile-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 10px 15px;
+            background: rgba(10, 10, 15, 0.6); 
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            min-width: 180px; /* 바 길이 확보 */
+        }
+        #profile-card:hover {
+            transform: translateY(-2px);
+            border-color: #FF416C;
+        }
+
+        /* 상태바 공통 스타일 */
+        .stat-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 3px;
+            margin-top: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        
+        /* HP 바 (빨강) */
+        #hp-bar-fill { background: linear-gradient(90deg, #ff416c, #ff4b2b); box-shadow: 0 0 5px #ff416c; }
+        /* XP 바 (노랑/골드) */
+        #xp-bar-fill { background: linear-gradient(90deg, #FDB931, #FFD700); box-shadow: 0 0 5px #FFD700; }
+
+        .stat-text {
+            font-size: 0.7rem;
+            color: #ccc;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 600;
+        }
+
+        /* 모바일 대응 */
+        @media (max-width: 768px) {
+            #top-ui { top: 5px; left: 5px; right: 5px; flex-direction: column; align-items: center; gap: 5px; }
+            #top-left-group { width: 100%; justify-content: center; }
+            #top-right-group { width: 100%; align-items: center; }
+            #profile-card { min-width: 150px; padding: 8px; }
+        }
+
+        
+
     </style>
     <script>
     // !function() { function detectDevTool(allow) { if(isNaN(+allow)) allow = 100; var start = +new Date(); debugger; var end = +new Date(); if(isNaN(start) || isNaN(end) || end - start > allow) { document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s" } } if(window.attachEvent) { if (document.readyState === "complete" || document.readyState === "interactive") { detectDevTool(); window.attachEvent('onresize', detectDevTool); window.attachEvent('onmousemove', detectDevTool); window.attachEvent('onfocus', detectDevTool); window.attachEvent('onblur', detectDevTool); } else { setTimeout(argument.callee, 0); } } else { window.addEventListener('load', detectDevTool); window.addEventListener('resize', detectDevTool); window.addEventListener('mousemove', detectDevTool); window.addEventListener('focus', detectDevTool); window.addEventListener('blur', detectDevTool); } }();
@@ -666,6 +754,7 @@
     <audio id="sfx-star" src="sfx/star_catch.mp3"></audio>
     <audio id="sfx-meteor-fall" src="sfx/meteor_fall.mp3"></audio> 
     <audio id="sfx-meteor-impact" src="sfx/meteor_impact.mp3"></audio>
+    <audio id="sfx-levelup" src="sfx/levelup.mp3"></audio>
 
     <audio id="sfx-magic-circle" src="sfx/magic_circle.mp3"></audio> 
     <audio id="sfx-meteor-friction" src="sfx/meteor_friction.mp3"></audio> 
@@ -673,11 +762,35 @@
 
     <div id="ui-layer">
         <div id="top-ui">
-            <div id="time-weather-info" class="glass-panel interactive">
-                <div id="time-display">00:00</div>
-                <div id="weather-display">맑음</div>
+            <div id="top-left-group" style="display: flex; gap: 10px; align-items: flex-start; pointer-events: auto;">
+                <div id="time-weather-info" class="glass-panel interactive">
+                    <div id="time-display">00:00</div>
+                    <div id="weather-display">맑음</div>
+                </div>
+                
+                <div id="profile-card" class="interactive" onclick="openNicknameEdit()" style="display: flex; flex-direction: column; justify-content: center; padding: 10px 15px; background: rgba(10, 10, 15, 0.6); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; min-width: 180px; cursor: pointer;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                        <span id="profile-name" style="font-size:1rem; font-weight:bold;">Unknown</span>
+                        <span id="profile-lv" style="color:#FFD700; font-size:0.8rem; font-weight:bold;">LV.1</span>
+                    </div>
+
+                    <div class="stat-bar-container" style="width: 100%; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden;">
+                        <div id="hp-bar-fill" class="stat-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff416c, #ff4b2b); transition: width 0.2s;"></div>
+                    </div>
+                    <div class="stat-text" style="font-size: 0.7rem; color: #ccc; display: flex; justify-content: space-between; margin-top: 2px;">
+                        <span>HP</span><span id="hp-text">100/100</span>
+                    </div>
+
+                    <div class="stat-bar-container" style="width: 100%; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; margin-top: 3px;">
+                        <div id="xp-bar-fill" class="stat-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #FDB931, #FFD700); transition: width 0.2s;"></div>
+                    </div>
+                    <div class="stat-text" style="font-size: 0.7rem; color: #ccc; display: flex; justify-content: space-between; margin-top: 2px;">
+                        <span>EXP</span><span id="xp-text">0.0%</span>
+                    </div>
+                </div>
             </div>
-            <div>
+
+            <div id="top-right-group">
                 <div id="currency-display">✨ Stella Fragment: 0</div>
                 <div class="menu-btn-group">
                     <button class="menu-btn glass-panel interactive" onclick="toggleModal('consumable-modal', true)">🧪 ITEMS</button>
@@ -689,58 +802,25 @@
                 </div>
             </div>
         </div>
-
-        <button id="quick-item-toggle" onclick="toggleQuickBar()">▶</button>
-        <div id="quick-item-bar">
-            <div style="font-family: 'Cinzel', serif; color: #aaa; text-align: center; font-size: 0.9rem; margin-bottom: 5px; letter-spacing: 2px;">QUICK ITEMS</div>
-            <div id="quick-list"></div>
-        </div>
-
-        <button id="chat-toggle-btn" class="interactive" onclick="toggleChat()">💬 CHAT</button>
-
-        <div id="chat-container">
-            <div id="chat-history"></div>
-            <div id="chat-input-area">
-                <input type="text" id="chat-input" placeholder="엔터(Enter)를 눌러 채팅..." maxlength="50">
-                <button id="chat-send-btn">전송</button>
-            </div>
-        </div>
-
-        <div id="combo-display">
-            <div id="combo-count">0 COMBO</div>
-            <div id="combo-message"></div>
-            <div id="combo-bar-bg"><div id="combo-bar"></div></div>
-        </div>
-
-        <div id="buff-display">
-            <span id="buff-luck">🍀 행운: x1.00</span>
-            <span id="buff-speed">⚡ 속도: x1.00</span>
-        </div>
-
-        <div id="item-log-container"></div>
         
+        <button id="quick-item-toggle" onclick="toggleQuickBar()">▶</button>
+        <div id="quick-item-bar"><div id="quick-list"></div></div>
+        <button id="chat-toggle-btn" class="interactive" onclick="toggleChat()">💬 CHAT</button>
+        <div id="chat-container"><div id="chat-history"></div><div id="chat-input-area"><input type="text" id="chat-input"><button id="chat-send-btn">전송</button></div></div>
+        <div id="combo-display"><div id="combo-count"></div><div id="combo-message"></div><div id="combo-bar-bg"><div id="combo-bar"></div></div></div>
+        <div id="buff-display"></div>
+        <div id="item-log-container"></div>
         <button id="roll-bottom-toggle" class="interactive" onclick="toggleRollBottom()">▲ ROLL</button>
         <div id="roll-bottom-bar" class="glass-panel">
-            <div id="stage">
-                <div id="aura-text">운명의 수레바퀴를 돌리십시오.</div>
-                <div id="odds-text">1 in ???</div>
-            </div>
-
+            <div id="stage"><div id="aura-text">...</div><div id="odds-text"></div></div>
             <div id="control-area" class="interactive">
-                <button id="btn-keep" class="decision-btn">✔ 저장 (Keep)</button>
-                <button id="btn-discard" class="decision-btn">✖ 분해 (+✨)</button>
+                <button id="btn-keep" class="decision-btn">✔ 저장</button>
+                <button id="btn-discard" class="decision-btn">✖ 분해</button>
                 <button id="roll-btn" onclick="startRoll()">AWAKEN DESTINY</button>
                 <button id="auto-roll-btn" onclick="toggleAutoRoll()">AUTO ROLL: OFF</button>
             </div>
         </div>
-
-        <div id="mobile-controls" style="display: none;">
-            <div class="control-group left">
-                <button id="btn-left" class="touch-btn">◀</button>
-                <button id="btn-right" class="touch-btn">▶</button>
-            </div>
-            
-        </div>
+        <div id="mobile-controls" style="display: none;"><div class="control-group left"><button id="btn-left" class="touch-btn">◀</button><button id="btn-right" class="touch-btn">▶</button></div></div>
     </div>
 
     <div id="consumable-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🧪 CONSUMABLES</h2><button class="close-btn" onclick="toggleModal('consumable-modal', false)">✖</button></div><div id="consumable-list" class="scroll-list"></div></div></div>
@@ -748,7 +828,6 @@
     <div id="inventory-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🎒 AURAS</h2><button class="close-btn" onclick="toggleModal('inventory-modal', false)">✖</button></div><div id="inv-list" class="scroll-list"></div></div></div>
     <div id="crafting-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🛠️ CRAFTING</h2><button class="close-btn" onclick="toggleModal('crafting-modal', false)">✖</button></div><div id="craft-list" class="scroll-list"></div></div></div>
     <div id="equipment-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🛡️ EQUIPMENT</h2><button class="close-btn" onclick="toggleModal('equipment-modal', false)">✖</button></div><div id="equip-slots"><div class="equip-slot" id="slot-0" onclick="unequipGear(0)">+</div><div class="equip-slot" id="slot-1" onclick="unequipGear(1)">+</div><div class="equip-slot" id="slot-2" onclick="unequipGear(2)">+</div></div><h3 style="margin-top:20px; border-bottom:1px solid #555; padding-bottom:5px; font-family:'Rajdhani', sans-serif;">보유 장비</h3><div id="gear-list" class="scroll-list" style="max-height: 40vh;"></div></div></div>
-
     <div id="settings-modal" class="modal interactive">
         <div class="modal-content glass-panel">
             <div class="modal-header">
@@ -801,23 +880,219 @@
                         <label><input type="checkbox" id="chk-fancy" checked onchange="updateGraphicSetting('fancyGraphics', this.checked)"> 화려한 그래픽</label>
                     </div>
                 </div>
-            </div> 
+            </div>
         </div>
+    </div>
+    <div id="nickname-modal" class="modal interactive" style="z-index: 10000;">
+        <div class="modal-content glass-panel" style="max-width: 400px; text-align: center;">
+            <div class="modal-header">
+                <h2 class="modal-title">🆔 IDENTITY</h2>
+            </div>
+            <div style="padding: 20px;">
+                <p style="color: #aaa; margin-bottom: 15px;">이 세계에서 사용할 이름을 알려주세요.</p>
+                <input type="text" id="nickname-input" placeholder="닉네임 입력 (최대 8글자)" maxlength="8" 
+                    style="width: 100%; padding: 12px; background: rgba(0,0,0,0.5); border: 1px solid #555; color: white; border-radius: 8px; font-size: 1.1rem; text-align: center;">
+                
+                <button onclick="confirmNickname()" style="
+                    margin-top: 20px; width: 100%; padding: 12px; 
+                    background: linear-gradient(45deg, #FF416C, #FF4B2B); 
+                    border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;
+                ">
+                    확인 (CONFIRM)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="levelup-overlay" style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        opacity: 0; transform: scale(1.5); transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    ">
+        <h1 style="
+            font-family: 'Cinzel', serif; font-size: 5rem; color: #FFD700;
+            text-shadow: 0 0 30px #FFD700, 0 0 10px white; margin: 0;
+            background: linear-gradient(to bottom, #fff, #FFD700); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        ">LEVEL UP!</h1>
+        <div id="levelup-desc" style="
+            font-family: 'Rajdhani', sans-serif; font-size: 2rem; color: white;
+            text-shadow: 0 0 10px black; margin-top: 10px; font-weight: bold;
+        ">LV.1 -> LV.2</div>
+        <div style="color: #81C784; font-size: 1.2rem; margin-top: 5px; text-shadow: 0 0 5px black;">
+            운명에 대한 이해도(Mastery) 상승!
+        </div>
+    </div>
+
+    <div id="death-overlay" style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); z-index: 20000;
+        display: none; flex-direction: column; align-items: center; justify-content: center;
+        color: #FF003C; pointer-events: auto;
+    ">
+        <h1 style="font-family: 'Cinzel', serif; font-size: 4rem; text-shadow: 0 0 20px #FF003C; margin: 0;">YOU DIED</h1>
+        <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; color: #fff; margin-top: 10px;">
+            부활까지 <span id="respawn-timer" style="color: #FFD700; font-weight: bold; font-size: 2rem;">10.0</span>초
+        </div>
+        <div id="death-penalty-msg" style="margin-top: 20px; text-align: center; color: #aaa; font-size: 0.9rem;">
+            </div>
     </div>
 
 
     <script>
+
         // 2. [핵심 수정] 전역 변수 최상단 선언 (에러 방지용)
         let W = window.innerWidth; 
         let H = window.innerHeight;
-        // ★ [핵심 수정] 모바일 감지 변수를 '전역'으로 뺍니다. (어디서든 접근 가능하게)
+
+        // ★ [맵 확장] 월드 크기 및 카메라 변수 추가
+        const WORLD_WIDTH = 10000; // 전체 맵의 가로 길이 (원하는 만큼 늘릴 수 있음)
+        // ★ [수정] 카메라가 플레이어(맵 중앙)를 비추며 시작
+        let cameraX = (WORLD_WIDTH / 2) - (W / 2);           
+        let targetCameraX = cameraX; // 타겟도 맞춰서 스르륵 이동 방지
+
+        let currentLevel = 1; 
+        let totalExp = 0; // ★ [신규] 누적 경험치 (돈을 써도 안 줄어듦)
+
         const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const TWO_PI = Math.PI * 2;
+
+        // ★ [에러 수정 1] 이 변수들이 아래에 있어서 에러가 났습니다. 맨 위로 올립니다.
+        let gameTimeMinutes = 12 * 60; // 시간 변수 미리 선언
+        const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`; // 채팅 색상 미리 선언
+        let landscapes = [], trees = [], grassBlades = [], stars = [], clouds = [], ruins = []; // 배열 미리 선언
+        // ★ [핵심 수정] 모바일 감지 변수를 '전역'으로 뺍니다. (어디서든 접근 가능하게)
         // ==========================================
         // ★ [멀티플레이] 서버 연결 및 데이터 관리
         // ==========================================
         const socket = io("https://rng-server.onrender.com");
         let otherPlayers = {}; // 다른 유저 데이터를 담을 공간
+
+        // 1. [수정] 플레이어 객체 (속도 대폭 상향!)
+        const player = {
+            x: WORLD_WIDTH / 2, y: H * 0.85, vx: 0, 
+
+            accel: 1.5, friction: 0.82, maxSpeed: 12, 
+            
+            width: 24, height: 100,
+            facingRight: true, walkFrame: 0,
+            scarfSegments: Array.from({ length: 6 }, () => ({ x: WORLD_WIDTH / 2, y: H * 0.85 })),
+            
+            // ★ 체력/무적/회복 시스템 변수 포함
+            hp: 100, maxHp: 100, invincibleTime: 0,
+            noDamageTimer: 0,
+            isDead: false, deathTimer: 0
+        };
+
+        // 2. [수정] 레벨 계산 및 경험치 공식 (난이도 대폭 상향)
+        // 공식: 필요 경험치 = 250 * (레벨 - 1)^2
+        function calcLevel() {
+            if (!totalExp || totalExp < 0) return 1;
+            // 기존 10 -> 250으로 변경 (레벨업이 25배 힘들어진 대신 가치 상승)
+            return Math.floor(Math.sqrt(totalExp / 250)) + 1;
+        }
+        
+        function getExpPercent() {
+            let lv = calcLevel();
+            // 현재 레벨의 바닥 경험치
+            let currentLevelExp = 250 * Math.pow(lv - 1, 2);
+            // 다음 레벨 달성 경험치
+            let nextLevelExp = 250 * Math.pow(lv, 2);
+            
+            let numerator = totalExp - currentLevelExp;
+            let denominator = nextLevelExp - currentLevelExp;
+            
+            if (denominator <= 0) return 0;
+            return Math.min(100, Math.max(0, (numerator / denominator) * 100));
+        }
+
+        // [수정] 경험치 절대값(현재/필요) 표시 기능 추가
+        function updateProfileUI() {
+            const lv = calcLevel();
+            currentLevel = lv;
+            
+            // 닉네임 & 레벨
+            const pName = document.getElementById("profile-name");
+            const pLv = document.getElementById("profile-lv");
+            if(pName) { pName.innerText = myNickname || "Unknown"; pName.style.color = myChatColor; }
+            if(pLv) pLv.innerText = `LV.${lv}`;
+
+            // XP바 (텍스트 표시 변경)
+            const xpFill = document.getElementById("xp-bar-fill");
+            const xpText = document.getElementById("xp-text");
+            
+            if(xpFill && xpText) {
+                // 1. 현재 레벨의 경험치 구간 계산 (난이도 상향 공식 적용됨: 250 * level^2)
+                let currentLevelBase = 250 * Math.pow(lv - 1, 2);
+                let nextLevelBase = 250 * Math.pow(lv, 2);
+                
+                // 2. 이번 레벨에서 올려야 할 총 경험치량 (분모)
+                let requiredExp = nextLevelBase - currentLevelBase;
+                
+                // 3. 현재 내가 이번 레벨에서 모은 경험치량 (분자)
+                let currentExp = totalExp - currentLevelBase;
+                
+                // (혹시 모를 에러 방지)
+                if (requiredExp <= 0) requiredExp = 1;
+                
+                // 4. 퍼센트 계산
+                let pct = Math.min(100, Math.max(0, (currentExp / requiredExp) * 100));
+
+                xpFill.style.width = `${pct}%`;
+                
+                // ★ [핵심 변경] 퍼센트 뒤에 (현재 / 필요) 숫자 추가 & 천 단위 콤마
+                xpText.innerText = `${pct.toFixed(1)}% (${Math.floor(currentExp).toLocaleString()} / ${Math.floor(requiredExp).toLocaleString()})`;
+            }
+
+            // HP바 (레벨당 체력 +50 유지)
+            player.maxHp = 100 + (lv - 1) * 50;
+            
+            if (player.hp > player.maxHp) player.hp = player.maxHp;
+            
+            const hpFill = document.getElementById("hp-bar-fill");
+            const hpText = document.getElementById("hp-text");
+            if(hpFill && hpText) {
+                let hpPct = (player.hp / player.maxHp) * 100;
+                hpFill.style.width = `${Math.max(0, hpPct)}%`;
+                hpText.innerText = `${Math.ceil(player.hp)}/${player.maxHp}`;
+            }
+        }
+
+        // ★ [누락된 함수 추가] 경험치 획득 및 레벨업 처리
+        function addExp(amount) {
+            if (!amount || isNaN(amount)) return;
+            
+            let oldLv = calcLevel();
+            totalExp += amount;
+            let newLv = calcLevel();
+
+            // 레벨업 체크
+            if (newLv > oldLv) {
+                playSound(sfxLevelUp || sfxSuccess);
+                player.hp = player.maxHp; // 레벨업 시 체력 완전 회복
+                
+                // 화면 중앙 레벨업 연출
+                const overlay = document.getElementById("levelup-overlay");
+                const desc = document.getElementById("levelup-desc");
+                if (overlay && desc) {
+                    desc.innerText = `LV.${oldLv} ➤ LV.${newLv}`;
+                    overlay.style.opacity = 1; 
+                    overlay.style.transform = "scale(1)";
+                    setTimeout(() => { 
+                        overlay.style.opacity = 0; 
+                        overlay.style.transform = "scale(1.5)"; 
+                    }, 2500);
+                }
+                
+                // 채팅창 알림
+                const sysMsg = document.createElement("div");
+                sysMsg.innerHTML = `<span style="color:#FFD700; font-weight:bold;">🎉 LEVEL UP! (LV.${newLv}) - HP 완전 회복!</span>`;
+                if (document.getElementById("chat-history")) {
+                    document.getElementById("chat-history").appendChild(sysMsg);
+                }
+            }
+            updateProfileUI(); // UI 갱신
+        }
 
         // 1. 처음 접속했을 때 기존 유저 목록 받기
         socket.on('currentPlayers', (players) => {
@@ -995,6 +1270,56 @@
         // ==========================================
         const chatHistory = document.getElementById("chat-history");
         const chatInput = document.getElementById("chat-input");
+
+        // [수정] 사망 페널티 및 10초 대기 적용 takeDamage
+        function takeDamage(amount) {
+            // 이미 죽었거나 무적이면 무시
+            if (player.invincibleTime > 0 || player.isDead) return;
+
+            player.hp -= amount;
+            player.invincibleTime = 60; 
+            player.noDamageTimer = 0; 
+            
+            playSound(COMBAT_SFX.hit_normal); 
+            shakeIntensity = 15; applyScreenShake(); 
+            
+            spawnDamageText(player.x - cameraX, player.y - currentParallaxY*50 - 80, `-${Math.round(amount)}`, true, "#FF416C");
+
+            // ★ 사망 처리 로직
+            if (player.hp <= 0) {
+                player.hp = 0;
+                player.isDead = true; // 죽음 상태 플래그
+                player.deathTimer = 10.0; // 10초 카운트다운
+
+                // 1. 경험치 페널티 (10% 소실)
+                let lostExp = Math.floor(totalExp * 0.1);
+                totalExp = Math.max(0, totalExp - lostExp);
+
+                // 2. 재화 페널티 (20% 소실)
+                let lostFrags = Math.floor(fragments * 0.2);
+                fragments = Math.max(0, fragments - lostFrags);
+
+                // UI 갱신
+                updateProfileUI();
+                document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`;
+
+                // 사망 화면 표시
+                const dOverlay = document.getElementById("death-overlay");
+                const dTimer = document.getElementById("respawn-timer");
+                const dMsg = document.getElementById("death-penalty-msg");
+
+                dOverlay.style.display = "flex";
+                dTimer.innerText = "10.0";
+                dMsg.innerHTML = `
+                    <p style="color: #FF5252;">경험치 소실: -${lostExp.toLocaleString()} XP</p>
+                    <p style="color: #FFD700;">별의 파편 소실: -${lostFrags.toLocaleString()}✨</p>
+                `;
+                
+                // 사이드바 알림도 띄움
+                showSideNotification("FATAL ERROR", "생체 신호 소실...", "#FF0000");
+            }
+            updateProfileUI(); 
+        }
 
         // ========================================================
         // ★ [멀티플레이] 다른 유저를 그리는 함수 (머플러 제외, 최적화 버전)
@@ -1275,8 +1600,6 @@
             ctx.shadowBlur = 0;
             ctx.fillStyle = "rgba(0, 229, 255, 0.15)";
             ctx.beginPath(); ctx.ellipse(0, 5, 30, 8, 0, 0, TWO_PI); ctx.fill();
-
-            // ⚠️ 붉은 머플러(스카프) 삭제됨
 
             // --- 3. 슬림핏 롱 코트 ---
             let coatGrad = ctx.createLinearGradient(0, -h, 0, 0);
@@ -1896,7 +2219,7 @@
             { result: "potion_ultimate", reqItems: { "potion_luck_3": 3, "potion_speed_3": 3 }, reqAuras: { "CREATOR": 1, "THE_WORLD": 1 } }
         ];
 
-        const bgmPlayer = document.getElementById("bgm"); const weatherSfxPlayer = document.getElementById("weather-sfx"); const sfxLightning = document.getElementById("sfx-lightning"); const sfxRoll = document.getElementById("sfx-roll"); const sfxSpin = document.getElementById("sfx-spin"); const sfxClick = document.getElementById("sfx-click"); const sfxSuccess = document.getElementById("sfx-success"); const sfxEquip = document.getElementById("sfx-equip"); const sfxReveal = document.getElementById("sfx-reveal"); const sfxGlitch = document.getElementById("sfx-glitch"); const sfxStar = document.getElementById("sfx-star");
+        const bgmPlayer = document.getElementById("bgm"); const weatherSfxPlayer = document.getElementById("weather-sfx"); const sfxLightning = document.getElementById("sfx-lightning"); const sfxRoll = document.getElementById("sfx-roll"); const sfxSpin = document.getElementById("sfx-spin"); const sfxClick = document.getElementById("sfx-click"); const sfxSuccess = document.getElementById("sfx-success"); const sfxEquip = document.getElementById("sfx-equip"); const sfxReveal = document.getElementById("sfx-reveal"); const sfxGlitch = document.getElementById("sfx-glitch"); const sfxStar = document.getElementById("sfx-star"); const sfxLevelUp = document.getElementById("sfx-levelup");
         // 💡 [신규] 운석 오디오 매핑
         const sfxMeteorFall = document.getElementById("sfx-meteor-fall");
         const sfxMeteorImpact = document.getElementById("sfx-meteor-impact");
@@ -2065,8 +2388,6 @@
         let dt = 0;         // 델타 타임 (초 단위)
         let dtFactor = 1;   // 60FPS 기준 보정 배율 (1.0 = 60FPS)
         let networkTimer = 0; // 서버 전송 타이머 (프레임 독립적)
-        
-        let landscapes = [], trees = [], grassBlades = [], stars = [], clouds = [];
 
         // ★ [기믹 2] 별똥별 시스템 변수
         let shootingStars = [];
@@ -2077,12 +2398,6 @@
         let targetSnow = 0, currentSnow = 0;            
         let targetParticleCount = 0, currentParticleCount = 0; 
         let oldWeatherId = "clear";    
-        
-        // ★ [맵 확장] 월드 크기 및 카메라 변수 추가
-        const WORLD_WIDTH = 10000; // 전체 맵의 가로 길이 (원하는 만큼 늘릴 수 있음)
-        // ★ [수정] 카메라가 플레이어(맵 중앙)를 비추며 시작
-        let cameraX = (WORLD_WIDTH / 2) - (W / 2);           
-        let targetCameraX = cameraX; // 타겟도 맞춰서 스르륵 이동 방지
 
         // [최적화 1] DOM 요소 캐싱 (변수 미리 선언)
         const DOM = {
@@ -2096,15 +2411,110 @@
         // ★ [신규] 데미지 폰트 시스템
         let damageLabels = []; // 데미지 숫자들 저장소
 
-        function spawnDamageText(x, y, damage, isCrit) {
+        // 1. [핵심] 전역 변수 최우선 선언 (에러 방지)
+        let myNickname = null; 
+        let myUserId = localStorage.getItem('ultimate_rng_user_id');
+
+        // ID가 없으면 새로 생성
+        if (!myUserId) {
+            myUserId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now();
+            localStorage.setItem('ultimate_rng_user_id', myUserId);
+        }
+
+        // 2. 닉네임 변경/입력 함수 "먼저" 정의 (호출보다 위에 있어야 함)
+        window.openNicknameEdit = function(isForced = false) {
+            playSound(sfxClick);
+            const modal = document.getElementById("nickname-modal");
+            const input = document.getElementById("nickname-input");
+            
+            input.value = myNickname || ""; 
+            modal.classList.add("active");
+            
+            // 강제 입력 모드일 때 (처음 접속 시)
+            if (isForced) {
+                // 닫기 버튼 숨기기 같은 로직이 필요하다면 여기에 추가
+            }
+            
+            setTimeout(() => input.focus(), 100); // 포커스 딜레이
+        };
+
+        window.confirmNickname = function() {
+            const input = document.getElementById("nickname-input");
+            const newName = input.value.trim();
+
+            if (newName.length < 1) {
+                alert("이름을 한 글자 이상 입력해주세요!");
+                return;
+            }
+
+            playSound(sfxSuccess);
+            myNickname = newName;
+            localStorage.setItem('ultimate_rng_nickname', myNickname);
+            
+            // UI 갱신
+            updateProfileUI(); 
+            
+            // 모달 닫기
+            document.getElementById("nickname-modal").classList.remove("active");
+            
+            // 채팅창에 알림
+            const sysMsg = document.createElement("div");
+            sysMsg.innerHTML = `<span style="color:#81C784;">[SYSTEM] 신분 증명서가 갱신되었습니다: <b>${myNickname}</b></span>`;
+            if(document.getElementById("chat-history")) {
+                document.getElementById("chat-history").appendChild(sysMsg);
+            }
+
+            // (선택) 소켓이 이미 연결되어 있다면 닉네임 변경 알리기
+            // socket.emit('updateNickname', myNickname); 
+        };
+
+        // 3. 저장된 닉네임 불러오기 및 초기화 로직
+        let savedNick = localStorage.getItem('ultimate_rng_nickname');
+            
+        if (!savedNick || savedNick === "null") {
+            // 저장된 게 없으면 -> 변수는 null로 두고, 입력창 띄우기
+            myNickname = null;
+            // 페이지 로딩 후 안전하게 띄우기 위해 setTimeout 사용
+            setTimeout(() => { openNicknameEdit(true); }, 500);
+        } else {
+            // 저장된 게 있으면 -> 변수에 할당하고 UI 갱신
+            myNickname = savedNick;
+            // updateProfileUI 함수가 아직 정의 안 됐을 수 있으므로 안전장치
+            if (typeof updateProfileUI === 'function') updateProfileUI();
+        }
+
+        // 4. 서버에 입장 정보 전송 (이제 myNickname 변수가 확실히 존재함)
+        // 닉네임이 없으면 일단 "Unknown"으로 접속하고 나중에 갱신
+        socket.emit('joinGame', {
+            userId: myUserId,
+            nickname: myNickname || "Unknown",
+            aura: equippedAuraName || "COMMON"
+        });
+
+        // 5. 중복 접속 방지
+        socket.on('kickDuplicate', () => {
+            alert("⚠️ 다른 탭에서 이미 게임이 실행 중입니다! (중복 접속 방지)");
+            window.location.href = "about:blank"; 
+        });
+
+        // [수정] 데미지 텍스트 생성 (숫자/문자열 모두 호환되도록 수정됨)
+        function spawnDamageText(x, y, value, isCrit, customColor) {
+            let textToShow = value;
+            
+            // 만약 입력값이 숫자라면 소수점 1자리로 포맷팅
+            if (typeof value === 'number') {
+                textToShow = value.toFixed(1);
+            }
+            
             damageLabels.push({
                 x: x, 
-                y: y - 20, // 머리 위에서 시작
-                text: damage.toFixed(1), // 소수점 1자리까지
-                life: 1.0, // 수명
-                vy: -3, // 위로 솟구치는 속도
-                isCrit: isCrit, // 크리티컬 여부
-                scale: isCrit ? 1.5 : 1.0 // 크리티컬이면 글자 커짐
+                y: y - 20, 
+                text: textToShow, // 변환된 텍스트 사용
+                life: 1.5, 
+                vy: -2, 
+                scale: isCrit ? 1.5 : 1.0,
+                isCrit: isCrit, 
+                customColor: customColor // 색상 지정 지원
             });
         }
 
@@ -2113,16 +2523,17 @@
         // ==========================================
         let critters = []; // 화면에 돌아다니는 몹 배열
 
+        // 1. 몬스터 DB 업데이트 (damage 속성 추가됨)
         const CRITTER_DB = {
-            "clear": { name: "햇살 다람쥐", color: "#FFCA28", drop: "nut_light", size: 15, speed: 1.3, hp: 2000, moveType: "hop", uiHeight: 5.5 }, 
-            "rain":  { name: "비구름 개구리", color: "#66BB6A", drop: "frog_skin", size: 14, speed: 1.6, hp: 2400, moveType: "hop", uiHeight: 3.5 },
-            "snow":  { name: "눈토끼", color: "#FFFFFF", drop: "rabbit_fur", size: 16, speed: 1.8, hp: 3000, moveType: "hop", uiHeight: 4.0 },
-            "wind":  { name: "바람 정령", color: "#B2DFDB", drop: "spirit_wing", size: 18, speed: 1.9, hp: 5000, moveType: "float", uiHeight: 4.5 },
-            "thunder": { name: "전기 도마뱀", color: "#FBC02D", drop: "volt_scale", size: 14, speed: 2.0, hp: 5400, moveType: "dash", uiHeight: 3.0 },
-            "foggy": { name: "안개 요정", color: "#CFD8DC", drop: "fairy_dust", size: 12, speed: 1.2, hp: 4600, moveType: "float", uiHeight: 4.0 },
-            "eclipse": { name: "그림자 까마귀", color: "#1A1A1A", drop: "shadow_beak", size: 18, speed: 2.4, hp: 24000, moveType: "float", uiHeight: 4.5 },
-            "blood-moon": { name: "핏빛 박쥐", color: "#D32F2F", drop: "blood_fang", size: 15, speed: 2.7, hp: 24000, moveType: "float", uiHeight: 4.0 },
-            "glitch": { name: "V̵O̵I̵D̵_B̴U̷G̸", color: "#00E5FF", drop: "core_glitch", size: 20, speed: 3.5, hp: 100000, moveType: "glitch", uiHeight: 5.5 }
+            "clear": { name: "햇살 다람쥐", color: "#FFCA28", drop: "nut_light", size: 15, speed: 1.3, hp: 1000, damage: 5, moveType: "hop", uiHeight: 5.5 }, 
+            "rain":  { name: "비구름 개구리", color: "#66BB6A", drop: "frog_skin", size: 14, speed: 1.6, hp: 2400, damage: 8, moveType: "hop", uiHeight: 3.5 },
+            "snow":  { name: "눈토끼", color: "#FFFFFF", drop: "rabbit_fur", size: 16, speed: 1.8, hp: 3000, damage: 10, moveType: "hop", uiHeight: 4.0 },
+            "wind":  { name: "바람 정령", color: "#B2DFDB", drop: "spirit_wing", size: 18, speed: 1.9, hp: 5000, damage: 15, moveType: "float", uiHeight: 4.5 },
+            "thunder": { name: "전기 도마뱀", color: "#FBC02D", drop: "volt_scale", size: 14, speed: 2.0, hp: 5400, damage: 20, moveType: "dash", uiHeight: 3.0 },
+            "foggy": { name: "안개 요정", color: "#CFD8DC", drop: "fairy_dust", size: 12, speed: 1.2, hp: 4600, damage: 12, moveType: "float", uiHeight: 4.0 },
+            "eclipse": { name: "그림자 까마귀", color: "#1A1A1A", drop: "shadow_beak", size: 18, speed: 2.4, hp: 24000, damage: 50, moveType: "float", uiHeight: 4.5 },
+            "blood-moon": { name: "핏빛 박쥐", color: "#D32F2F", drop: "blood_fang", size: 15, speed: 2.7, hp: 24000, damage: 60, moveType: "float", uiHeight: 4.0 },
+            "glitch": { name: "V̵O̵I̵D̵_B̴U̷G̸", color: "#00E5FF", drop: "core_glitch", size: 20, speed: 3.5, hp: 100000, damage: 999, moveType: "glitch", uiHeight: 5.5 }
         };
 
         // ==========================================
@@ -2158,27 +2569,6 @@
                 applyNewWeather(currentWeather); 
             }
         }
-
-        // ==========================================
-        // ★ [멀티플레이] 유저 세션 및 중복 접속 방지
-        // ==========================================
-
-        // 1. 고유 유저 ID (신분증) 생성 및 로드
-        let myUserId = localStorage.getItem('ultimate_rng_user_id');
-        if (!myUserId) {
-            myUserId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now();
-            localStorage.setItem('ultimate_rng_user_id', myUserId);
-        }
-
-        // 2. 닉네임 로드 및 설정 (null 방어)
-        let myNickname = localStorage.getItem('ultimate_rng_nickname');
-        if (!myNickname || myNickname === "null") {
-            myNickname = prompt("✨ 닉네임을 입력해주세요!", "방랑자_" + Math.floor(Math.random()*999)) || "익명의_방랑자";
-            localStorage.setItem('ultimate_rng_nickname', myNickname);
-        }
-
-        // 3. 채팅 색상 및 UI 참조
-        const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`;
 
         // 4. 서버에 입장 정보 전송 (아이디 + 닉네임 + 현재 오라)
         socket.emit('joinGame', {
@@ -2275,6 +2665,7 @@
                 const data = { 
                     fragments, 
                     inventory, 
+                    totalExp, // ★ 추가
                     ownedGears, 
                     equippedGears, 
                     consumableInv, 
@@ -2290,6 +2681,45 @@
             } catch(e) { } 
         }
 
+        // 닉네임 변경 창 열기 (isForced가 true면 닫기 버튼 없음/배경 클릭 불가)
+        window.openNicknameEdit = function(isForced = false) {
+            playSound(sfxClick);
+            const modal = document.getElementById("nickname-modal");
+            const input = document.getElementById("nickname-input");
+            
+            input.value = myNickname || ""; // 기존 이름 채워넣기
+            modal.classList.add("active");
+            
+            // 처음 접속이면 강제로 입력해야 함 (X 버튼이나 배경 클릭으로 못 닫게 제어 필요하지만 간단히 생략)
+            input.focus();
+        };
+
+        // 닉네임 확정 및 저장
+        window.confirmNickname = function() {
+            const input = document.getElementById("nickname-input");
+            const newName = input.value.trim();
+
+            if (newName.length < 1) {
+                alert("이름을 한 글자 이상 입력해주세요!");
+                return;
+            }
+
+            playSound(sfxSuccess);
+            myNickname = newName;
+            localStorage.setItem('ultimate_rng_nickname', myNickname);
+            
+            // 서버에 변경된 이름 전송 (다음 이동 패킷부터 적용되지만 즉시 반영 요청)
+            // (socket.emit 코드가 있다면 여기서 호출 가능)
+            
+            updateProfileUI(); // 상단 프로필 카드 갱신
+            document.getElementById("nickname-modal").classList.remove("active");
+            
+            // 시스템 메시지 (채팅창에)
+            const sysMsg = document.createElement("div");
+            sysMsg.innerHTML = `<span style="color:#81C784;">[SYSTEM] 신분 증명서가 갱신되었습니다: <b>${myNickname}</b></span>`;
+            document.getElementById("chat-history").appendChild(sysMsg);
+        };
+
         function loadGame() {
             try {
                 const saved = localStorage.getItem('ultimate_rng_save_v5');
@@ -2298,6 +2728,7 @@
 
                     // 1. 기본 자원 및 아이템 복구
                     fragments = Number(data.fragments) || 0;
+                    totalExp = Number(data.totalExp) || 0; // ★ 추가 (없으면 0)
                     inventory = data.inventory || [];
                     ownedGears = data.ownedGears || [];
                     equippedGears = data.equippedGears || [null, null, null];
@@ -2366,8 +2797,8 @@
                 console.error("❌ 데이터를 불러오는 중 오류 발생:", e);
             }
         }
-        
-        function updateAllUI() { document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`; calcBuffs(); renderInventory(); renderConsumableList(); renderAlchemyList(); renderCrafting(); renderEquipment(); renderQuickBar(); updateSkipThreshold(document.getElementById("skip-slider").value, true);}
+
+        function updateAllUI() { document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`; updateProfileUI(); calcBuffs(); renderInventory(); renderConsumableList(); renderAlchemyList(); renderCrafting(); renderEquipment(); renderQuickBar(); updateSkipThreshold(document.getElementById("skip-slider").value, true);}
         
         // [수정] 버프 계산 및 UI 업데이트 (중복 표시 방지 추가)
         function calcBuffs() { 
@@ -2464,7 +2895,26 @@
         }
 
 
-        window.toggleModal = function(id, show) { playSound(sfxClick); const modal = document.getElementById(id); if (show) { modal.style.zIndex = 9999; modal.classList.add('active'); } else modal.classList.remove('active'); };
+        // [수정] 창을 열 때(Show=true)만 해당 목록을 새로고침하는 최적화 함수
+        window.toggleModal = function(id, show) { 
+            playSound(sfxClick); 
+            const modal = document.getElementById(id); 
+            
+            if (show) { 
+                modal.style.zIndex = 9999; 
+                modal.classList.add('active'); 
+                
+                // ★ 핵심: 창을 열 때만 데이터를 새로 그립니다! (렉 제거의 1등 공신)
+                if (id === 'inventory-modal') renderInventory();
+                else if (id === 'consumable-modal') renderConsumableList();
+                else if (id === 'alchemy-modal') renderAlchemyList();
+                else if (id === 'crafting-modal') renderCrafting();
+                else if (id === 'equipment-modal') renderEquipment();
+                
+            } else { 
+                modal.classList.remove('active'); 
+            } 
+        };
 
         // [수정] 오라 장착/해제 (UI 즉시 갱신)
         window.toggleEquipAura = function(name) {
@@ -2531,24 +2981,23 @@
                 </div>`; 
             }); 
         }
-        // [수정] 오라 분해 (UI 즉시 갱신)
+        // [수정] 오라 분해 (목록 갱신은 창이 열려있을 때만 유효하므로, 여기선 데이터만 처리)
         window.scrapAura = function(name, amount) { 
             playSound(sfxClick); 
             amount = parseInt(amount);
-
             let auraData = allAuras.find(a => a.name === name);
             if (!auraData) return;
 
-            // 1. 보유량 확인 (예외 처리)
             let currentCount = countAura(name);
             if (amount > currentCount) amount = currentCount;
-            if (amount <= 0) return;
 
-            // 2. 조각 획득
             let fragPerItem = Math.max(1, Math.ceil(auraData.chanceX / 10));
             fragments += (fragPerItem * amount); 
 
-            // 3. 인벤토리에서 삭제
+            // ★ [추가] 분해 경험치 획득 (조각 양의 50%만큼 추가 경험치)
+            addExp(fragPerItem * amount * 0.2);
+
+            // 인벤토리에서 제거
             for (let i = inventory.length - 1; i >= 0 && amount > 0; i--) {
                 if (inventory[i].name === name) {
                     inventory.splice(i, 1);
@@ -2556,13 +3005,12 @@
                 }
             }
 
-            // 4. 장착 중인 오라가 다 사라졌으면 장착 해제
-            if (equippedAuraName === name && countAura(name) === 0) {
-                equippedAuraName = null;
-            }
-
-            // ★ 핵심: UI 갱신
-            updateAllUI(); // 전체 UI 갱신 (fragments 수치도 바뀌어야 하므로)
+            // ★ 돈 표시 갱신
+            document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`;
+            
+            // ★ 중요: 분해는 '인벤토리 창' 안에서 일어나는 일이므로
+            // 여기서는 예외적으로 리스트를 다시 그려줘야 버튼 누른 티가 납니다.
+            renderInventory(); 
         };
 
         function renderConsumableList() { const list = document.getElementById("consumable-list"); list.innerHTML = ""; Object.entries(consumableInv).forEach(([key, count]) => { if(count <= 0) return; let item = consumableDB[key]; if(!item) return; list.innerHTML += `<div class="item-card"><div><div class="item-name" style="color:${item.color}">${item.name} <span style="float:right;">x${count}</span></div><div class="item-desc">${item.desc}</div></div><button class="action-sm-btn btn-alchemy" onclick="useConsumable('${key}')" style="pointer-events:auto;">사용하기</button></div>`; }); }
@@ -2604,8 +3052,13 @@
                 }
 
                 if(applied) {
-                    playSound(sfxEquip); consumableInv[key]--; 
-                    calcBuffs();
+                    playSound(sfxEquip); 
+                    consumableInv[key]--; 
+                    
+                    // ★ 핵심: 저장 대신 화면 갱신 함수들 호출
+                    calcBuffs(); 
+                    renderConsumableList(); // 소모품 창 갱신
+                    renderQuickBar();       // 퀵바 갱신
                 }
             } 
         };
@@ -2832,21 +3285,6 @@
             }
         }
         const vfxParticles = new ParticleSystem();
-
-        const player = {
-            // ★ [수정] 맵의 정중앙에서 시작 (WORLD_WIDTH / 2)
-            x: WORLD_WIDTH / 2, 
-            y: H * 0.85, 
-            vx: 0,                  
-            accel: 0.4,        
-            friction: 0.85,    
-            maxSpeed: 4,       
-            width: 24, height: 100,
-            facingRight: true,      
-            walkFrame: 0,
-            // ★ [수정] 머플러도 중앙에서 시작하도록 초기값 변경
-            scarfSegments: Array.from({ length: 6 }, () => ({ x: WORLD_WIDTH / 2, y: H * 0.85 }))
-        };
         
         // ★ 신규 추가: 머플러 물리 설정값
         const scarfConfig = {
@@ -4369,72 +4807,92 @@
             weatherParticles.push({ x: startX, y: startY, z: z, vx: vx, vy: vy, size: size, weatherType: currentWeather.id, opacity: currentWeather.id === "foggy" ? Math.random() * 0.02 : 0.3 + (0.5 * z), char: char }); 
         }
 
-        // =======================================================
-        // ★ [수정] 플레이어 그리기 (은발 흔들림 버그 픽스 완료)
-        // =======================================================
+        // [수정] 플레이어 그리기 (좌표 꼬임 버그 수정됨)
         function drawPlayer(ctx) {
+            // 1. 그래픽 상태 초기화
             ctx.save();
-            if (!player.facingRight) ctx.scale(-1, 1); 
+            ctx.fillStyle = "black"; 
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 1.0;
+            ctx.shadowBlur = 0;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
 
-            let isMoving = Math.abs(player.vx) > 0.1;
-            let animTime = player.walkFrame * 0.1; 
-            let breathing = Math.sin(globalRenderTime * 0.04) * 2;
-            let bounce = isMoving ? Math.abs(Math.sin(animTime)) * 4 : breathing;
+            // 2. 방향 전환
+            if (!player.facingRight) ctx.scale(-1, 1);
+            if (player.invincibleTime > 0) ctx.globalAlpha = 0.6;
 
-            const h = 100; const w = 24;
+            const isMoving = Math.abs(player.vx) > 0.1;
 
-            // ========================================================
-            // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (최적화 + 디자인 유지) ---
-            // ========================================================
+            // ============================================================
+            // [⚙️ 애니메이션 엔진]
+            // ============================================================
+            
+            // 1. 모션 블렌딩
+            if (typeof player.runWeight === 'undefined') player.runWeight = 0;
+            const targetWeight = Math.abs(player.vx) > 0.1 ? 1.0 : 0.0;
+            player.runWeight += (targetWeight - player.runWeight) * 0.15; 
+
+            // 2. 애니메이션 타이머
+            const cycle = player.walkFrame * 0.25; 
+            const idleBreath = Math.sin(globalRenderTime * 0.05);
+
+            // 3. 자세 제어 변수
+            const tiltAngle = lerp(0, 0.4, player.runWeight); 
+            const bounceY = lerp(idleBreath * 1.5, Math.abs(Math.sin(cycle)) * 4, player.runWeight);
+            
+            // 4. 좌표 기준점
+            const hipX = 0;
+            const hipY = -45 + bounceY; 
+            const shoulderY = hipY - 30; // ★ 어깨 높이 변수 (에러 방지)
+
+            // [컬러 팔레트]
+            const C = {
+                skin: "#FFCCBC", hair: "#ECEFF1",
+                coatDark: "#1A2327", coatMid: "#263238", coatLight: "#37474F",
+                pants: "#102027", limbDark: "#0D1316", metal: "#B0BEC5"
+            };
+
+            // --- 0. 장착된 오라 이펙트 ---
             if (equippedAuraName) {
-                // ========================================================
-                // --- 0. ★ [티어 1~6] 장착된 오라 이펙트 (최적화 + 디자인 유지) ---
-                // ========================================================
                 let aura = allAuras.find(a => a.name === equippedAuraName);
                 if (aura) {
-                    // ★ [간소화 모드 ON] - 성능 최적화 (기존 동일)
                     if (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleAuras) {
-                        ctx.save();
-                        ctx.translate(0, -50); 
-                        
-                        ctx.globalAlpha = 0.2; ctx.fillStyle = aura.color; 
+                        ctx.save(); ctx.translate(0, -50); 
+                        ctx.globalAlpha = (player.invincibleTime > 0) ? 0.1 : 0.2; 
+                        ctx.fillStyle = aura.color; 
                         ctx.beginPath(); ctx.arc(0, 0, 45, 0, TWO_PI); ctx.fill();
-
-                        ctx.globalAlpha = 0.8; ctx.strokeStyle = aura.color; ctx.lineWidth = 2; 
-                        ctx.stroke();
-
-                        if (aura.chanceX >= 1000000) {
-                            ctx.fillStyle = "#FFF"; ctx.font = "20px serif"; 
-                            ctx.textAlign = "center"; ctx.fillText("👑", 0, -55);
-                        }
+                        ctx.globalAlpha = (player.invincibleTime > 0) ? 0.4 : 0.8;
+                        ctx.strokeStyle = aura.color; ctx.lineWidth = 2; ctx.stroke();
                         ctx.restore();
-                    } 
-                    // ★ [간소화 모드 OFF] - 화려함 유지 + 렉 제거 버전
-                    else {
-                        ctx.save();
-                        // [핵심 최적화] 그림자 대신 빛 혼합 모드 사용 (훨씬 빠름)
-                        ctx.globalCompositeOperation = 'lighter'; 
+                    } else {
+                        // ★ [화려한 오라 모드]
                         
-                        let chance = aura.chanceX;
+                        // 1. 바닥 광원 (별도 저장/복원 사용)
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'lighter'; 
                         let [r, g, b] = hexToRgb(aura.color);
-                        let time = globalRenderTime * 0.015;
-                        const applyGroundPerspective = () => ctx.scale(1, 0.35);
-
-                        // 공통 바닥 발광 (ShadowBlur 대체용 가짜 광원)
-                        ctx.save(); applyGroundPerspective();
+                        ctx.scale(1, 0.35);
                         let baseGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 60);
-                        baseGlow.addColorStop(0, `rgba(${r},${g},${b}, 0.4)`); // 중심부 빛
+                        baseGlow.addColorStop(0, `rgba(${r},${g},${b}, 0.4)`);
                         baseGlow.addColorStop(1, "transparent");
                         ctx.fillStyle = baseGlow; 
                         ctx.beginPath(); ctx.arc(0, 0, 60, 0, TWO_PI); ctx.fill();
-                        ctx.restore();
+                        ctx.restore(); 
+
+                        // 2. 등급별 오라 이펙트 (현재 좌표계 유지)
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'lighter';
+                        let chance = aura.chanceX;
+                        let time = globalRenderTime * 0.015;
+                        const applyGroundPerspective = () => ctx.scale(1, 0.35);
 
                         // [티어 1] Common ~ Rare
                         if (chance < 1000) {
-                            ctx.fillStyle = aura.color; 
-                            // 그림자 제거 -> 대신 투명도 조절로 느낌 유지
+                            ctx.fillStyle = aura.color;
                             for(let i=0; i<3; i++) {
-                                let pTime = (time + i * 2) % 6; 
+                                let pTime = (time + i * 2) % 6;
                                 ctx.globalAlpha = Math.max(0, 1 - (pTime / 6));
                                 ctx.beginPath(); ctx.arc(Math.sin(time + i) * 15, -pTime * 15, 2, 0, TWO_PI); ctx.fill();
                             }
@@ -4442,7 +4900,6 @@
                         // [티어 2] Epic ~ Legend
                         else if (chance < 1000000) {
                             ctx.save(); applyGroundPerspective();
-                            // 쉐도우 블러 제거, 라인 두께 조절로 발광 느낌
                             drawMagicCircle(ctx, 0, 0, 50, time, aura.color, 0.5);
                             ctx.restore();
                             
@@ -4450,14 +4907,9 @@
                             for(let i=0; i<3; i++) {
                                 let angle = time * 2 + (TWO_PI/3)*i;
                                 let px = Math.cos(angle) * 35; let py = -40 + Math.sin(angle) * 15;
-                                
-                                // 잔상 (그림자 대신 옅은 선)
                                 ctx.strokeStyle = `rgba(${r},${g},${b}, 0.3)`; 
                                 ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(Math.cos(angle-0.2)*35, -40 + Math.sin(angle-0.2)*15); ctx.stroke();
-                                
-                                // 별
                                 ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
-                                // 별 주변 가짜 광원
                                 ctx.fillStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.beginPath(); ctx.arc(px, py, 6, 0, TWO_PI); ctx.fill();
                             }
                         }
@@ -4473,7 +4925,6 @@
                             ctx.restore();
 
                             ctx.save(); ctx.translate(0, -60); ctx.rotate(time * 0.5);
-                            // 그라데이션 콘 (이건 원래 빨라서 유지)
                             for(let i=0; i<16; i++) {
                                 ctx.rotate(TWO_PI/16);
                                 let grad = ctx.createLinearGradient(0, 0, 0, -110);
@@ -4483,7 +4934,6 @@
                             }
                             ctx.restore();
 
-                            // 회전하는 사각형들
                             ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
                             for(let i=0; i<6; i++) {
                                 let angle = time + (TWO_PI/6)*i;
@@ -4495,14 +4945,12 @@
                         }
                         // [티어 4] Transcendent
                         else if (chance < 1000000000) {
-                            // 바닥진
                             ctx.save(); applyGroundPerspective(); ctx.rotate(time*0.2);
                             ctx.strokeStyle = `rgba(${r},${g},${b}, 0.6)`; ctx.lineWidth = 2;
                             for(let i=0; i<6; i++) { ctx.rotate(Math.PI/3); ctx.beginPath(); ctx.moveTo(80,0); ctx.lineTo(150, 0); ctx.lineTo(120, 60); ctx.closePath(); ctx.stroke(); }
                             drawMagicCircle(ctx, 0, 0, 100, -time, "#fff", 0.6);
                             ctx.restore();
 
-                            // 회전하는 검 (그라데이션 유지)
                             ctx.save(); ctx.translate(0, -70);
                             for(let i=0; i<5; i++) {
                                 let angle = time + (TWO_PI/5)*i;
@@ -4512,15 +4960,12 @@
                                 swordGrad.addColorStop(0, "#fff"); swordGrad.addColorStop(1, aura.color);
                                 ctx.fillStyle = swordGrad;
                                 ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(5, 0); ctx.lineTo(0, 40); ctx.lineTo(-5, 0); ctx.fill();
-                                
-                                // 검 주변 빛 (그림자 대신 원 그리기)
                                 ctx.globalAlpha = 0.3; ctx.fillStyle = aura.color; 
                                 ctx.beginPath(); ctx.arc(0, 0, 15, 0, TWO_PI); ctx.fill();
                                 ctx.restore();
                             }
                             ctx.restore();
 
-                            // 날개 (그라데이션 자체가 예뻐서 그림자 없어도 됨)
                             let flow = Math.sin(time * 1.5);
                             for(let side of [-1, 1]) {
                                 for(let j=0; j<3; j++) {
@@ -4566,7 +5011,6 @@
                                 ctx.lineTo(Math.cos(tailAng)*radius, Math.sin(tailAng)*radius*0.3);
                                 ctx.strokeStyle = `rgba(${r},${g},${b}, 0.5)`; ctx.lineWidth = 3; ctx.stroke();
                                 
-                                // 별 (그림자 제거, 대신 겹쳐 그리기)
                                 ctx.fillStyle = "#fff"; 
                                 ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TWO_PI); ctx.fill();
                                 ctx.fillStyle = `rgba(${r},${g},${b}, 0.3)`; 
@@ -4574,14 +5018,13 @@
                             }
                             ctx.restore();
                             
-                            // 중앙 블랙홀 (그림자 대신 큰 그라데이션)
                             let holeGlow = ctx.createRadialGradient(0, -65, 10, 0, -65, 50);
                             holeGlow.addColorStop(0, "#fff"); holeGlow.addColorStop(1, `rgba(${r},${g},${b},0)`);
                             ctx.fillStyle = holeGlow; ctx.beginPath(); ctx.arc(0, -65, 50, 0, TWO_PI); ctx.fill();
                             
                             ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, -65, 15, 0, TWO_PI); ctx.fill();
                         }
-                        // [티어 6] "The Away From The World"
+                        // [티어 6] Final
                         else {
                             ctx.save(); applyGroundPerspective();
                             let groundGrad = ctx.createRadialGradient(0, 0, 50, 0, 0, 400);
@@ -4607,7 +5050,6 @@
                             let eyeY = -350 + Math.sin(time)*10;
                             let eyeOpen = Math.abs(Math.sin(time*1.5)); 
                             
-                            // 눈 후광 (그림자 대체)
                             let eyeGlow = ctx.createRadialGradient(0, eyeY, 50, 0, eyeY, 200);
                             eyeGlow.addColorStop(0, "rgba(255,255,255,0.8)"); eyeGlow.addColorStop(1, "transparent");
                             ctx.fillStyle = eyeGlow; ctx.beginPath(); ctx.arc(0, eyeY, 200, 0, TWO_PI); ctx.fill();
@@ -4622,62 +5064,343 @@
                                 ctx.beginPath(); ctx.arc(px, py, Math.random()*4, 0, TWO_PI); ctx.fill();
                             }
                         }
-                        ctx.restore(); // 화려한 모드 끝
+                        ctx.restore();
+                        // ★ [수정됨] 이전에 여기에 있던 불필요한 ctx.restore() 제거됨
                     }
                 }
             }
 
-            // 1. 발밑 그림자
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = "rgba(0, 229, 255, 0.15)";
-            ctx.beginPath(); ctx.ellipse(0, 5, 30, 8, 0, 0, TWO_PI); ctx.fill();
+            // ========================================================
+            // 2. [하체] 골반 기준 그리기
+            // ========================================================
+            
+            // 그림자
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            ctx.beginPath(); ctx.ellipse(0, 0, 20, 5, 0, 0, Math.PI*2); ctx.fill();
 
-            // 5. 다리 움직임
-            ctx.strokeStyle = "#000"; ctx.lineWidth = 5;
-            let legMovement = isMoving ? Math.sin(animTime) * 10 : 0;
-            let lift = isMoving ? Math.abs(Math.cos(animTime)) * 5 : 0;
-            ctx.beginPath(); ctx.moveTo(2, -h * 0.2); ctx.lineTo(2 + legMovement, 4 - lift); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-2, -h * 0.2); ctx.lineTo(-2 - legMovement, 4 - (isMoving ? Math.abs(Math.sin(animTime)) * 5 : 0)); ctx.stroke();
+            // [뒷다리]
+            let rHipRot = lerp(0, Math.sin(cycle + Math.PI) * 0.9, player.runWeight);
+            let rKneeRot = lerp(0, Math.max(0, Math.sin(cycle + Math.PI - 0.5) * 1.8), player.runWeight);
+            drawLeg(ctx, hipX, hipY + 10, rHipRot, rKneeRot, C.limbDark);
 
-            // 2. 슬림핏 롱 코트
-            let coatGrad = ctx.createLinearGradient(0, -h, 0, 0);
-            coatGrad.addColorStop(0, "#1a1a1a"); coatGrad.addColorStop(1, "#000000");
-            ctx.fillStyle = coatGrad;
+
+            // ========================================================
+            // 3. [상체] 몸통 회전 적용
+            // ========================================================
+            ctx.save();
+            ctx.translate(hipX, hipY + 5); 
+            ctx.rotate(tiltAngle);         
+            ctx.translate(-hipX, -(hipY + 5));
+
+            // 3-1. 뒷망토
+            ctx.fillStyle = "#1A1A1A";
             ctx.beginPath();
-            ctx.moveTo(0, -h + 20 - bounce);
-            ctx.bezierCurveTo(-w, -h + 25 - bounce, -w * 0.8, -h * 0.4, -w * 1.1 + (isMoving ? -5 : 0), 0);
-            ctx.lineTo(w * 0.7, 0);
-            ctx.bezierCurveTo(w * 0.5, -h * 0.4, w * 0.8, -h + 25 - bounce, 0, -h + 20 - bounce);
+            ctx.moveTo(hipX - 5, shoulderY);
+            let capeTip = -20 + (player.runWeight * -15);
+            ctx.quadraticCurveTo(hipX + capeTip, hipY + 20, hipX + capeTip - 5, hipY + 60 + Math.sin(cycle)*5);
+            ctx.lineTo(hipX + 8, hipY + 10);
             ctx.fill();
 
-            // 3. 휘날리는 은발 (★ dx -> player.vx 로 수정된 핵심 부분)
-            ctx.fillStyle = "#ffffff";
+            /// 3-2. 뒷팔 (Right Arm)
+            // 어깨: 달릴 때 앞뒤로 시원하게 흔듦 (-1.0 ~ 1.0 라디안)
+            let rArmRot = lerp(idleBreath * 0.05, Math.sin(cycle) * 0.8, player.runWeight);
+            
+            // 팔꿈치: 달릴 땐 90도('ㄴ'자)로 고정, 멈추면 펴짐
+            // ★ 핵심: sine파를 쓰지 않고 runWeight로만 제어해서 덜렁거림 방지
+            let rElbowBend = lerp(0.1, 1.5, player.runWeight); 
+
+            // 디테일: 팔이 뒤로 갈 때(Math.sin > 0) 아주 살짝만 더 펴줌 (자연스러움)
+            if (isMoving && Math.sin(cycle) > 0) rElbowBend *= 0.8;
+
+            drawArm(ctx, hipX, shoulderY, rArmRot, -rElbowBend, C.limbDark);
+
+            // 3-3. 등 뒤 무기
+            ctx.save();
+            ctx.translate(hipX - 5, shoulderY + 10); ctx.rotate(-0.5);
+            ctx.fillStyle = "#455A64"; ctx.fillRect(-2, -10, 5, 50); 
+            ctx.fillStyle = C.metal; ctx.fillRect(-1, -20, 3, 10); 
+            ctx.restore();
+
+            // 3-5. 머리 (Head) - [얼굴 노출 극대화 + 가닥 위주 스트레이트 장발]
+            ctx.save();
+            ctx.translate(hipX, shoulderY - 5); 
+            ctx.rotate(-tiltAngle * 0.7); // 고개 들기
+
+            // ========================================================
+            // ★ [스카프 물리] 정지 시 정적 + 이동 시 다이나믹 휘날림
+            // ========================================================
+            ctx.save();
+            const hStartX = hipX;
+            const hStartY = shoulderY + 60; 
+
+            // 1. 상태 기반 물리 수치 (rW가 0이면 움직임도 0에 수렴)
+            let rW = player.runWeight; 
+            let t = globalRenderTime;
+
+            // [움직임 제어] 가만히 있을 땐 아주 미세한 숨쉬기만, 달릴 때만 발동
+            let idleSway = Math.sin(t * 0.05) * 2;             // 정지 시 최소한의 흔들림
+            let runLean = rW * -45;                            // ★ 스카프처럼 뒤로 쫙 펴지는 힘 (강도 높임)
+            let runFlutter = Math.sin(t * 0.25) * (3 * rW);    // 달릴 때 파들거리는 효과
+            let runBounce = Math.abs(Math.sin(cycle)) * 12 * rW; // 뛸 때 위아래 탄력
+
+            const drawScarfHair = (offX, offY, len, width, alpha, phase) => {
+                let sx = hStartX + offX;
+                let sy = hStartY + offY;
+
+                // --- [채찍/스카프 곡선 계산] ---
+                // 뿌리(cp1)는 고정, 끝(ex)으로 갈수록 rW(속도)의 영향을 받음
+                let cp1x = sx + (runLean * 0.2); 
+                let cp1y = sy + (len * 0.3);
+                
+                let cp2x = sx + (runLean * 0.6) + (runFlutter * 0.5);
+                let cp2y = sy + (len * 0.7) - (runBounce * 0.2); // 달릴 때 살짝 위로 뜸
+
+                // 끝점: 가만히 있으면 수직(sx + idleSway), 달리면 뒤로(sx + runLean)
+                let ex = sx + (rW * runLean) + (rW * runFlutter) + ((1 - rW) * idleSway);
+                let ey = sy + len + runBounce;
+
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, ex, ey);
+                
+                // 베이스 그림자 가닥 (볼륨감)
+                ctx.lineWidth = width + 4;
+                ctx.strokeStyle = `rgba(180, 190, 200, ${alpha * 0.3})`;
+                ctx.stroke();
+
+                // 메인 가닥
+                ctx.lineWidth = width;
+                ctx.strokeStyle = `rgba(236, 239, 241, ${alpha})`;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            };
+
+            // 2. 가닥 배치 (중앙에서 바깥으로 풍성하게)
+            drawScarfHair(0, 0, 75, 12, 0.9, 0);       // 메인 긴 가닥
+            drawScarfHair(-4, 1, 65, 9, 0.85, 1.2);    // 왼쪽
+            drawScarfHair(4, 1, 60, 8, 0.85, 2.4);     // 오른쪽
+            drawScarfHair(-8, 3, 50, 5, 0.8, 3.6);    // 왼쪽 짧은 가닥
+            drawScarfHair(8, 2, 45, 4, 0.8, 4.8);     // 오른쪽 짧은 가닥
+
+            // [하이라이트 선]
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+            drawScarfHair(2, -2, 60, 2, 0.9, 0.5);
+            ctx.restore();
+
+            ctx.restore();
+
+            // --- [STEP 2: 목 & 얼굴 (중간)] ---
+            // 목
+            ctx.fillStyle = C.skin; 
+            ctx.fillRect(-3, -2, 6, 12);
+            
+            // 얼굴 (주변보다 살짝 앞에 위치)
+            ctx.save();
+            ctx.translate(3, -12); 
+            ctx.fillStyle = C.skin;
             ctx.beginPath();
-            let hairSway = isMoving ? -player.vx * 2 : Math.sin(globalRenderTime * 0.03) * 1.5;
-            ctx.moveTo(-10, -h + 5 - bounce);
-            ctx.quadraticCurveTo(hairSway, -h - 20 - bounce, 12 + hairSway, -h + 5 - bounce);
-            ctx.lineTo(8 + hairSway, -h + 25 - bounce); 
-            ctx.quadraticCurveTo(0, -h + 12 - bounce, -10, -h + 8 - bounce);
+            // 얼굴형을 좀 더 달걀형으로 깎아서 노출
+            ctx.ellipse(0, 0, 8.5, 10.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.restore(); // 머리 끝
+
+            // 3-4. 몸통 (코트)
+            ctx.fillStyle = C.coatMid;
+            ctx.beginPath();
+            ctx.moveTo(hipX - 7, shoulderY - 5); 
+            ctx.lineTo(hipX + 7, shoulderY - 5);
+            ctx.lineTo(hipX + 6, hipY + 5); 
+            let coatFlow = player.runWeight * 8;
+            ctx.lineTo(hipX + 8 + coatFlow, hipY + 25);
+            ctx.lineTo(hipX - 8 + coatFlow, hipY + 25);
+            ctx.lineTo(hipX - 6, hipY + 5);
+            ctx.fill();
+            
+            // ★ [수정됨] 코트 깃 (High Collar) - 더 높고 넓게 그려서 빈틈 삭제
+            ctx.fillStyle = C.coatLight;
+            ctx.beginPath(); 
+            ctx.moveTo(hipX - 8, shoulderY);       // 어깨 시작점
+            ctx.lineTo(hipX - 10, shoulderY - 12); // 깃 꼭대기 (높게!)
+            ctx.lineTo(hipX + 8, shoulderY - 10);  // 반대쪽 깃
+            ctx.lineTo(hipX + 8, shoulderY);       // 반대쪽 어깨
             ctx.fill();
 
-            // 4. 푸른 안광
-            ctx.fillStyle = "#00ffff"; ctx.shadowBlur = 8; ctx.shadowColor = "#00ffff";
-            ctx.beginPath(); ctx.arc(4, -h + 18 - bounce, 1.2, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+            // ========================================================
+            // ★ [앞/옆머리] 물리 수정 (정전기 제거, 중력 적용, 길이 단축)
+            // ========================================================
+            ctx.save();
 
-            // 6. 이름표 2줄 (닉네임 + 오라 이름)
-            if (!player.facingRight) ctx.scale(-1, 1); // 텍스트 뒤집힘 방지
-            ctx.fillStyle = "white"; ctx.shadowBlur = 3; ctx.shadowColor = "black";
-            ctx.font = "bold 11px Noto Sans KR"; ctx.textAlign = "center";
-            ctx.fillText(myNickname || "익명의 유저", 0, -h - 45 - bounce); 
+            let fRW = player.runWeight; 
+            let fT = globalRenderTime;
+
+            // fLean: 달릴 때 뒤로 밀리는 힘 (관성). 너무 세지 않게 조절.
+            let fLean = fRW * -35; 
+            // fBounce: 달릴 때 통통 튀는 상하 반동 (절대값). 중력 역할.
+            let fBounce = Math.abs(Math.sin(cycle)) * 5 * fRW;
+
+            const fRootX = hipX + 4; 
+            const fRootY = shoulderY - 28.5;
+
+            // phase: 가닥별 흔들림 박자 차이
+            const drawFrontSpread = (offX, offY, len, width, alpha, phase) => {
+                let sx = fRootX + offX;
+                let sy = fRootY + offY;
+
+                // flutter: 옆으로 살랑거리는 미세한 바람
+                let flutter = Math.sin(fT * 0.25 + phase) * (3 * fRW);
+                
+                // tipLag: 끝부분이 한 박자 늦게 따라오는 느낌 (무게감)
+                // phase 뒤에 -0.5를 줘서 뿌리보다 늦게 움직이게 함
+                let tipLag = Math.cos(fT * 0.25 + phase - 0.5) * (4 * fRW);
+
+                // --- [베지에 곡선 제어점 배치 (중력 중심)] ---
+                
+                // cp1: 뿌리 근처. 거의 움직임 없음 (단단히 고정)
+                let cp1x = sx + (fLean * 0.05); 
+                let cp1y = sy + (len * 0.2); // 아래로만 살짝 내려옴
+                
+                // cp2: 중간 부분. 뒤로 밀리지만 아래로 처짐.
+                // *중요*: 예전 코드에서 y값을 빼던걸 없애서 위로 뜨지 않게 함
+                let cp2x = sx + (fLean * 0.4) + flutter;
+                let cp2y = sy + (len * 0.5) + (fBounce * 0.3); 
+
+                // ex, ey: 머리카락 끝. 가장 무겁게 아래로 떨어짐.
+                let ex = sx + (fLean * 0.8) + tipLag;
+                // *핵심*: 기본 길이(len)에 반동(fBounce)을 더하고, 달릴 때 추가 중력(+ fRW*3)을 줌
+                let ey = sy + len + fBounce + (fRW * 3); 
+
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                // 자연스럽게 아래로 드레이프지는 곡선 유도
+                ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, ex, ey);
+                
+                ctx.lineWidth = width;
+                ctx.strokeStyle = `rgba(245, 245, 245, ${alpha})`; 
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            };
+            drawFrontSpread(-8, 4, 40, 11, 0.7, 1);      // 메인 옆머리 (짧아짐)
+            drawFrontSpread(-1, 1, 12, 3, 1.0, -1);      // 메인 옆머리 (짧아짐)
+
+            drawFrontSpread(-4, 0, 25, 3, 1.0, 3);      // 메인 옆머리 (짧아짐)
+            drawFrontSpread(-7, 1, 30, 5, 1.0, 2);      // 메인 옆머리 (짧아짐)
+            drawFrontSpread(-12.5, 7.5, 37, 7, 1.0, 1.5);      // 메인 옆머리 (짧아짐)
+
+            // [앞머리 뱅] 너무 높게 뜨지 않도록 제어점 높이 조절
+            ctx.beginPath();
+            ctx.moveTo(fRootX, fRootY);
+            ctx.lineWidth = 4.5;
+            ctx.strokeStyle = `rgba(245, 245, 245, 0.9)`;
+            ctx.stroke();
+
+            ctx.restore();
+
+
+            // 3-6. 앞팔 (Left Arm)
+            // 어깨: 뒷팔과 반대 위상 (Math.PI 추가)
+            let lArmRot = lerp(-0.1, Math.sin(cycle + Math.PI) * 0.8, player.runWeight);
+            
+            // 팔꿈치: 똑같이 달릴 땐 굽힘
+            let lElbowBend = lerp(0.1, 1.5, player.runWeight);
+            
+            // 디테일: 팔이 뒤로 갈 때 살짝 펴줌
+            if (isMoving && Math.sin(cycle + Math.PI) > 0) lElbowBend *= 0.8;
+
+            drawArm(ctx, hipX, shoulderY, lArmRot, -lElbowBend, C.coatMid);
+            
+            ctx.restore(); // 상체 회전 끝
+
+
+            // ========================================================
+            // 4. [하체] 앞다리 (Left Leg)
+            // ========================================================
+            let lHipRot = lerp(0, Math.sin(cycle) * 0.9, player.runWeight);
+            let lKneeRot = lerp(0, Math.max(0, Math.sin(cycle - 0.5) * 1.8), player.runWeight);
+            drawLeg(ctx, hipX, hipY + 10, lHipRot, lKneeRot, C.pants);
+
+
+            // ========================================================
+            // 5. UI 텍스트
+            // ========================================================
+            if (!player.facingRight) ctx.scale(-1, 1); 
+            
+            ctx.shadowColor = "black"; ctx.shadowBlur = 3;
+            ctx.fillStyle = "white"; 
+            ctx.font = "bold 12px Noto Sans KR"; ctx.textAlign = "center";
+            ctx.fillText(myNickname || "Unknown", 0, hipY - 80); 
 
             let activeAura = allAuras.find(a => a.name === equippedAuraName);
-            ctx.fillStyle = activeAura ? activeAura.color : "white";
-            ctx.shadowBlur = 5; ctx.shadowColor = activeAura ? activeAura.color : "black";
-            ctx.font = "bold 13px Cinzel";
-            ctx.fillText(equippedAuraName || "COMMON", 0, -h - 30 - bounce); 
+            if (activeAura) {
+                ctx.fillStyle = activeAura.color;
+                ctx.font = "bold 13px Cinzel";
+                ctx.shadowColor = activeAura.color;
+                ctx.fillText(equippedAuraName, 0, hipY - 65); 
+            }
             ctx.shadowBlur = 0;
 
+            ctx.restore();
+        }
+
+        // [🛠️ 헬퍼 함수] 선형 보간 (부드러운 움직임 필수)
+        function lerp(start, end, t) {
+            return start * (1 - t) + end * t;
+        }
+
+        // [🛠️ 헬퍼 함수] 관절 다리 그리기
+        function drawLeg(ctx, x, y, hipAngle, kneeAngle, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(hipAngle);
+
+            ctx.fillStyle = color;
+            // 허벅지
+            ctx.beginPath(); ctx.roundRect(-4, 0, 8, 16, 4); ctx.fill();
+
+            // 종아리
+            ctx.translate(0, 14); 
+            ctx.rotate(kneeAngle); 
+            ctx.beginPath(); ctx.roundRect(-3, 0, 6, 16, 3); ctx.fill();
+
+            // 발
+            ctx.translate(0, 16);
+            ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.lineTo(5, 5); ctx.lineTo(-3, 5); ctx.fill();
+
+            ctx.restore();
+        }
+
+        // [수정] 팔 그리기 (길이 연장 + 관절 디테일 추가)
+        function drawArm(ctx, x, y, shoulderAngle, elbowAngle, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(shoulderAngle); // 어깨 회전
+            
+            ctx.fillStyle = color;
+            
+            // 1. 상박 (Upper Arm) - 길이를 16으로 늘림
+            ctx.beginPath(); 
+            // 위는 굵고(6), 아래는 약간 얇아짐(5)
+            ctx.moveTo(-3, 0); ctx.lineTo(3, 0); 
+            ctx.lineTo(2.5, 16); ctx.lineTo(-2.5, 16);
+            ctx.fill();
+
+            // 2. 팔꿈치 관절 (Elbow)
+            ctx.translate(0, 16); // 상박 길이만큼 이동
+            ctx.rotate(elbowAngle); // ★ 팔꿈치 꺾기
+
+            // 3. 하박 (Forearm) - 길이를 14로 설정
+            ctx.beginPath(); 
+            ctx.moveTo(-2.5, 0); ctx.lineTo(2.5, 0);
+            ctx.lineTo(2, 14); ctx.lineTo(-2, 14);
+            ctx.fill();
+            
+            // 4. 손 (Hand)
+            ctx.translate(0, 14); // 하박 길이만큼 이동
+            ctx.fillStyle = "#FFCCBC"; // 살구색
+            ctx.beginPath(); ctx.arc(0, 2, 3.5, 0, Math.PI*2); ctx.fill();
+            
             ctx.restore();
         }
 
@@ -4688,381 +5411,6 @@
             let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
             t = Math.max(0, Math.min(1, t));
             return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
-        }
-
-        // ==========================================
-        // ★ [최종] 델타 타임 & 모바일 최적화 렌더링 루프
-        // ==========================================
-        function render() {
-            // 1. 델타 타임 계산
-            const now = performance.now();
-            dt = (now - lastFrameTime) / 1000; 
-            lastFrameTime = now;
-            
-            // 렉 걸렸을 때 순간이동 방지
-            if (dt > 0.1) dt = 0.1; 
-            dtFactor = dt * 60; // 60FPS 기준 보정값
-
-            // 2. 모바일 강제 최적화
-            if (IS_MOBILE) {
-                ctx.shadowBlur = 0; vfxCtx.shadowBlur = 0;
-                ctx.globalCompositeOperation = 'source-over'; 
-                vfxCtx.globalCompositeOperation = 'source-over';
-            }
-
-            // 3. 전역 시간 업데이트 (dtFactor 적용)
-            globalRenderTime += 1 * dtFactor;
-            windTime += 0.05 * dtFactor;
-
-            // UI 시간 업데이트 (10프레임마다)
-            let preciseHour = gameTimeMinutes / 60; 
-            hours = Math.floor(preciseHour); 
-            minutes = Math.floor(gameTimeMinutes % 60);
-
-            if (Math.floor(globalRenderTime) % 10 === 0) { 
-                 const timeEl = document.getElementById("time-display");
-                 if(timeEl) timeEl.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-            }
-
-            // 4. 콤보 및 피버 타임
-            if (comboTimeLeft > 0) {
-                let decayRate = 1 + Math.min(4, comboCount / 50); 
-                comboTimeLeft -= decayRate * dtFactor; // 시간 기반 감소
-                let widthPercent = Math.max(0, (comboTimeLeft / 300) * 100);
-                DOM.comboBar.style.width = widthPercent + "%";
-                if (comboTimeLeft <= 0) resetCombo();
-            }
-            if (isFeverTime) {
-                feverTimeLeft -= 1 * dtFactor;
-                if (feverTimeLeft <= 0) {
-                    isFeverTime = false;
-                    document.body.classList.remove("fever-active");
-                    calcBuffs();
-                }
-            }
-
-            // 5. 랜덤 이벤트
-            if (GRAPHICS.fancyGraphics && Math.random() < 0.002 * dtFactor) spawnShootingStar(); 
-            if (currentWeather.id === "thunder" && Math.random() < 0.002 * dtFactor) triggerLightning();
-
-            // 6. 날씨 보간
-            currentFog += (targetFog - currentFog) * 0.05 * dtFactor;      
-            currentSnow += (targetSnow - currentSnow) * 0.02 * dtFactor;   
-            currentParticleCount += (targetParticleCount - currentParticleCount) * 0.01 * dtFactor; 
-
-            // 7. 파티클 보충
-            if (weatherParticles.length < currentParticleCount) {
-                let spawnAmount = Math.min(5, Math.ceil((currentParticleCount - weatherParticles.length) * 0.1 * dtFactor));
-                for(let i=0; i<spawnAmount; i++) spawnWeatherParticle();
-            }
-
-            // 8. 플레이어 물리 연산 (dtFactor 적용)
-            if (keys.left) { player.vx -= player.accel * dtFactor; player.facingRight = false; player.walkFrame += 1 * dtFactor; }
-            if (keys.right) { player.vx += player.accel * dtFactor; player.facingRight = true; player.walkFrame += 1 * dtFactor; }
-            if (!keys.left && !keys.right) { player.walkFrame = 0; }
-
-            player.vx = Math.max(-player.maxSpeed, Math.min(player.vx, player.maxSpeed));
-            player.vx *= Math.pow(player.friction, dtFactor);
-            player.x += player.vx * dtFactor;
-
-            if (player.x < 30) player.x = 30; 
-            if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
-            player.y = getGroundY(player.x); 
-
-            // 카메라 추적
-            targetCameraX = Math.max(0, Math.min(player.x - W / 2, WORLD_WIDTH - W));
-            cameraX += (targetCameraX - cameraX) * 0.1 * dtFactor;
-            currentParallaxX += (targetParallaxX - currentParallaxX) * 0.05 * dtFactor; 
-            let playerSlopeY = (player.y - H * 0.85) / 50; 
-            targetParallaxY = mouseParallaxY + playerSlopeY;
-            currentParallaxY += (targetParallaxY - currentParallaxY) * 0.05 * dtFactor; 
-
-            updateScarfPhysics(); 
-
-            // 9. 그리기 시작
-            ctx.clearRect(0, 0, W, H); 
-
-            // (9-1) 하늘
-            let tSky = getCurrentSkyColors(preciseHour);
-            if (!isSkyInitialized) {
-                currentSkyTop = [...tSky.top]; currentSkyBot = [...tSky.bot]; isSkyInitialized = true;
-            } else {
-                for(let i=0; i<3; i++) {
-                    currentSkyTop[i] += (tSky.top[i] - currentSkyTop[i]) * 0.015 * dtFactor;
-                    currentSkyBot[i] += (tSky.bot[i] - currentSkyBot[i]) * 0.015 * dtFactor;
-                }
-            }
-
-            if (GRAPHICS.fancyGraphics && !IS_MOBILE) {
-                let grad = ctx.createLinearGradient(0, 0, 0, H);
-                grad.addColorStop(0, `rgb(${Math.round(currentSkyTop[0])},${Math.round(currentSkyTop[1])},${Math.round(currentSkyTop[2])})`);
-                grad.addColorStop(1, `rgb(${Math.round(currentSkyBot[0])},${Math.round(currentSkyBot[1])},${Math.round(currentSkyBot[2])})`);
-                ctx.fillStyle = grad; 
-            } else {
-                ctx.fillStyle = `rgb(${Math.round(currentSkyTop[0])},${Math.round(currentSkyTop[1])},${Math.round(currentSkyTop[2])})`;
-            }
-            ctx.fillRect(0, 0, W, H);
-
-            // (9-2) 천체 및 배경
-            let shouldHideSky = (currentWeather.id === "cloudy" || currentWeather.id === "foggy" || currentWeather.id === "thunder" || currentWeather.id === "glitch");
-            targetSkyAlpha = shouldHideSky ? 0 : 1;
-            currentSkyAlpha += (targetSkyAlpha - currentSkyAlpha) * 0.02 * dtFactor;
-            
-            // ... (별, 해, 달, 구름 코드는 너무 기니까 기존 코드 로직이 여기 있다고 가정합니다) ...
-            // ※ 만약 별/해/달 코드가 날아갔다면 이전 코드에서 generateNature 근처에 있던 렌더링 로직을 다시 넣어야 합니다.
-            // 일단 핵심 렌더링만 작성합니다.
-            
-            // (9-3) 지형 렌더링
-            let fogRgb = [200, 210, 220];
-            renderRuins(fogRgb, 0.0, 0.16); 
-            renderLand(landscapes[0], 0, fogRgb); renderWeatherLayer(0.1, 0.2); 
-            renderRuins(fogRgb, 0.16, 0.36); 
-            renderLand(landscapes[1], 1, fogRgb); renderWeatherLayer(0.2, 0.4); 
-            renderRuins(fogRgb, 0.36, 0.71);
-            renderTrees(2, fogRgb);
-            renderLand(landscapes[2], 2, fogRgb); renderWeatherLayer(0.4, 0.7); 
-            renderRuins(fogRgb, 0.71, 2.0);
-            renderLand(landscapes[3], 3, fogRgb); 
-            if (GRAPHICS.showGrass) renderGrass(fogRgb); 
-            renderWeatherLayer(0.7, 1.0);
-            
-            drawVillageElements(ctx, cameraX);
-
-            // [추가] 지역 알림
-            if (typeof BIOMES !== 'undefined') {
-                let newBiomeIdx = Math.floor(Math.max(0, player.x) / 5000);
-                if (newBiomeIdx >= BIOMES.length) newBiomeIdx = BIOMES.length - 1;
-                if (newBiomeIdx !== currentBiomeIndex) {
-                    currentBiomeIndex = newBiomeIdx;
-                    showSideNotification("NEW REGION", BIOMES[currentBiomeIndex].name, "#00E5FF");
-                }
-            }
-
-            // 10. 월드 오브젝트 (카메라 적용)
-            ctx.save();
-            ctx.translate(-cameraX, -currentParallaxY * 50); 
-            
-            let screenLeft = cameraX - 200;
-            let screenRight = cameraX + W + 200;
-            let fadeWidth = 150;
-
-            // (10-1) 투사체
-            for (let i = projectiles.length - 1; i >= 0; i--) {
-                let p = projectiles[i];
-                let lifeDecay = (p.type === 3 || p.type === 6) ? 0.01 : 0.025;
-                p.life -= lifeDecay * dtFactor;
-                p.x += (p.vx || 0) * dtFactor; 
-                p.y += (p.vy || 0) * dtFactor;
-
-                if (p.life <= 0) { projectiles.splice(i, 1); continue; }
-                if (p.type !== 3 && p.type !== 6) {
-                    if (p.x < screenLeft || p.x > screenRight) continue; 
-                }
-
-                // 몬스터 충돌 체크
-                for (let k = 0; k < critters.length; k++) {
-                    let c = critters[k];
-                    if (c.x < screenLeft || c.x > screenRight) continue; 
-                    if (c.hitTime > 0) continue; 
-                    if (p.type === 5 && p.hitMobiles && p.hitMobiles.includes(c.id)) continue; 
-
-                    let isHit = false;
-                    let cSize = c.typeData.size || 15;
-                    
-                    if (p.type === 3 || p.type === 6) { 
-                        let x2 = p.x + Math.cos(p.angle)*(p.length||1000); let y2 = p.y + Math.sin(p.angle)*(p.length||1000);
-                        let dist = distToSegment({x: c.x, y: c.y}, {x: p.x, y: p.y}, {x: x2, y: y2});
-                        if (dist < (p.width||100)/2 + cSize) isHit = true;
-                    } else { 
-                        let distSq = (p.x - c.x)**2 + (p.y - c.y)**2;
-                        if (distSq < (cSize + (p.size||20))**2) isHit = true;
-                    }
-
-                    // [수정] 몬스터 피격 처리 (랜덤 데미지 + 메이플 스타일 숫자)
-                    if (isHit) {
-                        // 1. 타격 이펙트 (간소화 모드 체크)
-                        if (!GRAPHICS.simpleProjectiles) {
-                            if(globalRenderTime % 5 === 0) playSound(sfxSuccess);
-                            vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", 5, 5);
-                        }
-
-                        // 2. ★ 데미지 랜덤 계산 (핵심)
-                        let baseDamage = (p.rarity || 1) / 10;
-                        
-                        // 타입별 보정
-                        if(p.type === 1) baseDamage *= 0.3;
-                        if(p.type === 2) baseDamage *= 0.2;
-                        if(p.type === 3) baseDamage *= 0.35;
-                        if(p.type === 4) baseDamage *= 0.25;
-                        if(p.type === 5) baseDamage *= 0.5;
-                        if(p.type === 6) baseDamage = Math.max(999, baseDamage);
-
-                        // ★ 랜덤 난수 (0.8 ~ 1.2배)
-                        let variance = 0.8 + Math.random() * 0.4; 
-                        let finalDamage = baseDamage * variance;
-                        
-                        // 크리티컬 판정 (1.1배 이상 터지면 크리!)
-                        let isCrit = variance > 1.1;
-
-                        if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
-                        else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
-
-                        // 3. 체력 깎기
-                        c.hp -= finalDamage; 
-                        c.hitTime = 10; 
-                        c.x += Math.cos(p.angle || 0) * 5; // 넉백
-
-                        // 4. ★ 데미지 숫자 띄우기 (화면 좌표 기준)
-                        spawnDamageText(c.x - cameraX, c.y - currentParallaxY * 50 - 40, finalDamage, isCrit);
-
-                        // 5. 투사체 처리
-                        if (p.type === 5) {
-                            if (!p.hitMobiles) p.hitMobiles = [];
-                            p.hitMobiles.push(c.id);
-                        } else if (p.type !== 3 && p.type !== 6) {
-                            p.life = 0; // 일반 투사체 소멸
-                        }
-                        
-                        break; 
-                    }
-                }
-                
-                if (p.life <= 0) { projectiles.splice(i, 1); continue; }
-
-                // ★ 투사체 그리기 (외부 함수 호출)
-                let edgeAlpha = 1.0;
-                if (p.x < screenLeft + fadeWidth) edgeAlpha = (p.x - screenLeft) / fadeWidth;
-                else if (p.x > screenRight - fadeWidth) edgeAlpha = (screenRight - p.x) / fadeWidth;
-                edgeAlpha = Math.max(0, Math.min(1, edgeAlpha));
-                
-                drawProjectile(ctx, p, Math.max(0, p.life) * edgeAlpha);
-            }
-
-            // (10-2) 다른 플레이어
-            for (const [id, pData] of Object.entries(otherPlayers)) {
-                if (pData.x > screenLeft && pData.x < screenRight) {
-                    ctx.save(); ctx.translate(pData.x, getGroundY(pData.x));
-                    drawOtherPlayer(ctx, pData); ctx.restore();
-                }
-            }
-
-            // (10-3) 내 플레이어
-            ctx.lineCap = "round"; ctx.lineJoin = "round"; 
-            if (!IS_MOBILE) { ctx.shadowBlur = 5; ctx.shadowColor = "#ff416c"; }
-            
-            for(let j=0; j<2; j++) {
-                ctx.lineWidth = j === 0 ? 10 : 5;
-                ctx.strokeStyle = j === 0 ? "#8e0000" : "#ff416c";
-                ctx.beginPath(); ctx.moveTo(player.scarfSegments[0].x, player.scarfSegments[0].y);
-                for (let i = 1; i < player.scarfSegments.length; i++) ctx.lineTo(player.scarfSegments[i].x, player.scarfSegments[i].y);
-                ctx.stroke();
-            }
-            ctx.save(); ctx.translate(player.x, player.y); drawPlayer(ctx); ctx.restore();
-
-            // (10-4) 몬스터
-            if (globalRenderTime % 180 < 1 * dtFactor && critters.length < 12 && Math.random() < 0.6) {
-                let cData = CRITTER_DB[currentWeather.id] || CRITTER_DB["clear"];
-                let dir = Math.random() < 0.5 ? 1 : -1;
-                let rDist = 1200 + Math.random() * 800;
-                let sx = Math.max(30, Math.min(player.x + (dir * rDist), WORLD_WIDTH - 30));
-                critters.push({ id: Date.now()+Math.random(), x: sx, y: getGroundY(sx), vx: (Math.random()-0.5)*cData.speed, typeData: cData, hp: cData.hp, maxHp: cData.hp, hitTime: 10, life: 1800, animTime: Math.random()*100 });
-            }
-            
-            for (let i = critters.length - 1; i >= 0; i--) {
-                let c = critters[i];
-                c.life -= 1 * dtFactor;
-                c.animTime += 0.1 * dtFactor;
-                if (c.hitTime > 0) c.hitTime -= 1 * dtFactor;
-
-                if (Math.random() < 0.01 * dtFactor) c.vx = (Math.random() - 0.5) * c.typeData.speed;
-                if (c.typeData.moveType === "dash" && Math.random() < 0.015 * dtFactor) c.vx *= 1.8;
-                if (c.typeData.moveType === "glitch" && Math.random() < 0.1 * dtFactor) c.x += (Math.random()-0.5)*100;
-                
-                c.x = Math.max(30, Math.min(c.x + c.vx * dtFactor, WORLD_WIDTH - 30));
-                let gY = getGroundY(c.x);
-                c.y = c.typeData.moveType === "float" ? c.y + (gY - 50 - c.y) * 0.05 * dtFactor + Math.sin(c.animTime)*0.5 : gY;
-
-                if (c.life <= 0) { critters.splice(i, 1); continue; }
-                // [수정] 몬스터 사망 처리 부분
-                if (c.hp <= 0) {
-                     playSound(sfxStar);
-                     let drop = c.typeData.drop; 
-                     consumableInv[drop] = (consumableInv[drop] || 0) + 1; 
-                     
-                     // ★ [신규] 아이템 획득 알림 띄우기
-                     spawnItemLog(drop);
-
-                     if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
-                     critters.splice(i, 1); continue;
-                }
-                
-                if (c.x > screenLeft && c.x < screenRight) {
-                    let bounce = (c.typeData.moveType === "hop") ? Math.abs(Math.sin(c.animTime)) * 10 : 0;
-                    let uiY = -(c.typeData.size * (c.typeData.uiHeight || 3.0));
-                    ctx.save(); ctx.translate(c.x, c.y - bounce);
-                    
-                    ctx.fillStyle = "white"; 
-                    if(!IS_MOBILE) { ctx.shadowBlur = 3; ctx.shadowColor = "black"; }
-                    ctx.font = "bold 12px Noto Sans KR"; ctx.textAlign = "center";
-                    ctx.fillText(c.typeData.name, 0, uiY - 15); 
-                    if(!IS_MOBILE) ctx.shadowBlur = 0;
-                    
-                    let hpPct = Math.max(0, c.hp / c.maxHp);
-                    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(-15, uiY, 30, 4);
-                    ctx.fillStyle = hpPct > 0.4 ? "#38ef7d" : "#ff416c"; ctx.fillRect(-15, uiY, 30 * hpPct, 4);
-
-                    if (c.vx < 0) ctx.scale(-1, 1);
-                    drawCritterSprite(ctx, c);
-                    ctx.restore();
-                    
-                    c.screenX = c.x - cameraX; c.screenY = c.y - bounce - currentParallaxY * 50;
-                }
-            }
-
-            renderSpawns(ctx);
-            vfxParticles.updateAndDraw(ctx);
-
-            if (GRAPHICS.fancyGraphics && !IS_MOBILE) {
-                renderShootingStars(ctx);
-            }
-            renderLightning(ctx);
-
-            
-
-            ctx.restore(); 
-
-            // 11. 오버레이 & 네트워크
-            let fogAlpha = currentWeather.id === "foggy" ? Math.min(0.5, currentFog) : (currentFog * 0.3);
-            DOM.fogOverlay.style.background = `rgba(${fogRgb[0]}, ${fogRgb[1]}, ${fogRgb[2]}, ${fogAlpha})`; 
-
-            if (GRAPHICS.fancyGraphics && !IS_MOBILE) {
-                ctx.fillStyle = (hours < 6 || hours > 18) ? "#b3e5fc" : "#ffffff";
-                window.ambientParticles.forEach(p => {
-                    p.x += (p.vx + (currentWeather.id === "wind" ? 2 : 0)) * dtFactor;
-                    p.y += p.vy * dtFactor;
-                    if(p.x < 0) p.x = W; if(p.x > W) p.x = 0; if(p.y < 0) p.y = H; if(p.y > H) p.y = 0;
-                    ctx.globalAlpha = p.alpha;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-                });
-                ctx.globalAlpha = 1.0;
-            }
-
-            networkTimer += dt;
-            if (networkTimer > 0.2) { 
-                // 움직이거나 키를 눌렀을 때만 전송
-                if (Math.abs(player.vx) > 0.1 || keys.left || keys.right) {
-                    socket.emit('playerMove', { 
-                        x: player.x, y: player.y, 
-                        vx: player.vx, 
-                        facingRight: player.facingRight, 
-                        aura: equippedAuraName || "COMMON", 
-                        nickname: myNickname 
-                    });
-                }
-                networkTimer = 0;
-            }
-
-            requestAnimationFrame(render); 
         }
 
         // ==========================================
@@ -5077,64 +5425,176 @@
             ctx.rotate(p.angle || 0);
             ctx.globalAlpha = finalAlpha;
 
-            // 모바일이 아니거나, 간소화 모드가 아닐 때만 효과 적용
-            if (!GRAPHICS.simpleProjectiles && !IS_MOBILE) {
-                ctx.globalCompositeOperation = 'lighter';
-                if (p.type !== 6) { // 차원베기는 그림자 끔
-                    ctx.shadowBlur = 15; 
-                    ctx.shadowColor = color;
+            // -----------------------------------------------------------
+                // [티어별 렌더링 로직 (기존 코드 유지)]
+                // -----------------------------------------------------------
+                
+                // [티어 1] 💫 스타 더스트
+                if (p.type === 1) {
+                    // 간소화 모드가 아닐 때만 그라데이션 사용
+                    if (!GRAPHICS.simpleAuras) {
+                        let grad = ctx.createLinearGradient(0, 0, -size * 4, 0);
+                        grad.addColorStop(0, color); grad.addColorStop(1, "transparent");
+                        ctx.fillStyle = grad;
+                    } else {
+                        ctx.fillStyle = color; // 단색
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(size, 0); ctx.lineTo(-size * 4, -size * 0.3); ctx.lineTo(-size * 4, size * 0.3);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2); ctx.fill();
                 }
-            } else {
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.shadowBlur = 0;
-            }
 
-            // --- 타입별 그리기 ---
-            if (p.type === 1) { // 💫 스타 더스트
-                ctx.fillStyle = color; 
-                ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size*4, -size*0.3); ctx.lineTo(-size*4, size*0.3); ctx.fill();
-                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, size*0.4, 0, TWO_PI); ctx.fill();
-            }
-            else if (p.type === 2) { // ⚔️ 문라이트 슬래시
-                ctx.fillStyle = color; 
-                ctx.beginPath(); ctx.moveTo(-size, size*0.5); 
-                ctx.bezierCurveTo(-size*0.5, -size*1.2, size*0.5, -size*1.2, size, 0); 
-                ctx.bezierCurveTo(size*0.5, -size*0.6, -size*0.5, -size*0.6, -size, size*0.5); ctx.fill();
-                ctx.fillStyle = "#fff"; 
-                ctx.beginPath(); ctx.moveTo(-size*0.6, size*0.2); 
-                ctx.bezierCurveTo(-size*0.2, -size*0.9, size*0.2, -size*0.9, size*0.7, -size*0.1); 
-                ctx.bezierCurveTo(size*0.2, -size*0.7, -size*0.2, -size*0.7, -size*0.6, size*0.2); ctx.fill();
-            }
-            else if (p.type === 3) { // ⚡ 디바인 레이
-                let len = p.length || 1500; let w = p.width || 90;
-                ctx.fillStyle = color; ctx.fillRect(0, -w/2, len, w);
-                ctx.fillStyle = "#fff"; ctx.fillRect(0, -w/6, len, w/3);
-            }
-            else if (p.type === 4) { // 🗡️ 발키리의 성검
-                ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(size*2, 0); ctx.lineTo(-size*0.5, -size*0.5); ctx.lineTo(-size*0.5, size*0.5); ctx.fill();
-                ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; 
-                ctx.beginPath(); ctx.moveTo(-size, 0); ctx.lineTo(size*2.5, 0); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(size*0.5, -size); ctx.lineTo(size*0.5, size); ctx.stroke();
-            }
-            else if (p.type === 5) { // 🌀 아케인 차크람
-                let o = size * 1.4;
-                // 회전 효과 (시간 기반)
-                ctx.rotate(globalRenderTime * 0.15); 
-                if (!GRAPHICS.simpleProjectiles && !IS_MOBILE) {
-                    let g = ctx.createRadialGradient(0, 0, size*0.5, 0, 0, o*1.5);
-                    g.addColorStop(0, color); g.addColorStop(1, "transparent");
-                    ctx.fillStyle = g; ctx.globalAlpha = finalAlpha * 0.3;
-                    ctx.beginPath(); ctx.arc(0, 0, o*1.5, 0, TWO_PI); ctx.fill();
+                // [티어 2] ⚔️ 문라이트 슬래시
+                else if (p.type === 2) {
+                    // 간소화 아닐 때만 잔상 그리기
+                    if (!GRAPHICS.simpleAuras) {
+                        let trailGrad = ctx.createLinearGradient(-size * 1.5, 0, size, 0);
+                        trailGrad.addColorStop(0, "transparent"); trailGrad.addColorStop(1, color);
+                        ctx.fillStyle = trailGrad;
+                        ctx.globalAlpha = finalAlpha * 0.4;
+                        ctx.beginPath();
+                        ctx.moveTo(-size * 1.5, size * 0.2);
+                        ctx.quadraticCurveTo(0, -size * 1.8, size, 0);
+                        ctx.quadraticCurveTo(0, size * 1.8, -size * 1.5, -size * 0.2);
+                        ctx.fill();
+                        // 다시 알파값 복구
+                        ctx.globalAlpha = finalAlpha;
+                    }
+
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = finalAlpha * 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(-size, size * 0.5);
+                    ctx.bezierCurveTo(-size * 0.5, -size * 1.2, size * 0.5, -size * 1.2, size, 0);
+                    ctx.bezierCurveTo(size * 0.5, -size * 0.6, -size * 0.5, -size * 0.6, -size, size * 0.5);
+                    ctx.fill();
+
+                    // 코어 (흰색)
+                    ctx.fillStyle = "#fff";
+                    ctx.globalAlpha = finalAlpha * 1.0;
+                    ctx.beginPath();
+                    ctx.moveTo(-size * 0.6, size * 0.2);
+                    ctx.bezierCurveTo(-size * 0.2, -size * 0.9, size * 0.2, -size * 0.9, size * 0.7, -size * 0.1);
+                    ctx.bezierCurveTo(size * 0.2, -size * 0.7, -size * 0.2, -size * 0.7, -size * 0.6, size * 0.2);
+                    ctx.fill();
                 }
-                ctx.globalAlpha = finalAlpha; ctx.lineWidth = 6; ctx.strokeStyle = color;
-                ctx.beginPath(); ctx.arc(0, 0, o, 0, TWO_PI); ctx.stroke();
-                ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
-            }
-            else if (p.type === 6) { // 🌌 차원 절단
-                let len = p.length || 3000; let w = p.width || 550;
-                ctx.fillStyle = "#eee"; ctx.fillRect(0, -w/2, len, w);
-                ctx.fillStyle = "#000"; ctx.fillRect(0, -w/10, len, w/5);
-            }
+
+                // [티어 3] ⚡ 하이퍼 레이저 (지지직거리는 연출 추가)
+                else if (p.type === 3) { 
+                    let len = p.length || 1500; 
+                    
+                    // 수명에 따라 굵기가 진동함 (파지직 효과)
+                    let jitter = Math.random() * 10;
+                    let w = (p.width || 90) * p.life + jitter; 
+
+                    // 1. 외곽 글로우 (레이저 색)
+                    if (!GRAPHICS.simpleProjectiles) {
+                        ctx.globalAlpha = finalAlpha * 0.3; 
+                        ctx.fillStyle = color;
+                        ctx.fillRect(0, -w/1.2, len, w * 1.6);
+                    }
+
+                    // 2. 메인 빔 (조금 더 진함)
+                    ctx.globalAlpha = finalAlpha * 0.6; 
+                    ctx.fillStyle = color;
+                    ctx.fillRect(0, -w/2, len, w);
+                    
+                    // 3. 코어 (흰색, 파지직거리며 얇아짐)
+                    let coreW = (w / 3) + Math.sin(globalRenderTime * 2) * 5;
+                    ctx.globalAlpha = finalAlpha * 1.0; 
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(0, -coreW/2, len, coreW);
+                }
+
+                // [티어 4] 🗡️ 발키리의 성검
+                else if (p.type === 4) {
+                    ctx.fillStyle = color; ctx.globalAlpha = finalAlpha * 0.5;
+                    ctx.beginPath(); ctx.moveTo(size*2, 0); ctx.lineTo(-size*0.5, -size*0.5); ctx.lineTo(-size*0.5, size*0.5); ctx.fill();
+                    
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(-size, 0); ctx.lineTo(size*2.5, 0); ctx.stroke(); 
+                    ctx.beginPath(); ctx.moveTo(size*0.5, -size); ctx.lineTo(size*0.5, size); ctx.stroke(); 
+                    
+                    ctx.fillStyle = "#fff"; ctx.beginPath();
+                    ctx.moveTo(size*1.8, 0); ctx.lineTo(0, -size*0.2); ctx.lineTo(0, size*0.2); ctx.fill();
+                }
+
+                // [티어 5] 🌀 아케인 차크람
+                else if (p.type === 5) {
+                    ctx.save();
+                    // 간소화 모드면 회전도 멈추게 할 수 있지만, 회전은 유지하는 게 보기 좋음
+                    ctx.rotate(angle + globalRenderTime * 0.15); 
+                    
+                    let outerRad = size * 1.4; 
+                    let innerRad = size * 0.7; 
+
+                    // 날개
+                    ctx.globalAlpha = finalAlpha * 0.9;
+                    ctx.lineWidth = 6; ctx.strokeStyle = color;
+                    for(let j=0; j<4; j++) {
+                        ctx.beginPath();
+                        let startAngle = (Math.PI * 2 / 4) * j + 0.3; 
+                        let endAngle = (Math.PI * 2 / 4) * (j+1) - 0.3;
+                        ctx.arc(0, 0, outerRad, startAngle, endAngle); ctx.stroke();
+                        
+                        ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff";
+                        ctx.beginPath(); ctx.arc(0, 0, outerRad + 4, startAngle -0.1, endAngle + 0.1); ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // 내부 링
+                    ctx.beginPath(); ctx.arc(0, 0, innerRad, 0, TWO_PI);
+                    ctx.lineWidth = 8; ctx.strokeStyle = color; ctx.stroke();
+                    ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+
+                    // 십자 & 코어
+                    ctx.lineWidth = 3; ctx.strokeStyle = "#ffffffaa";
+                    ctx.beginPath(); ctx.moveTo(-innerRad, 0); ctx.lineTo(innerRad, 0); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, -innerRad); ctx.lineTo(0, innerRad); ctx.stroke();
+
+                    ctx.beginPath(); ctx.arc(0,0, size*0.4, 0, TWO_PI);
+                    ctx.fillStyle = "#fff"; ctx.fill();
+
+                    ctx.restore();
+                }
+
+                // [티어 6] 🌌 차원 절단 (공간을 찢고 검은 균열이 남는 연출)
+                else if (p.type === 6) { 
+                    let len = p.length || 3000; 
+                    // 수명이 줄어들수록 균열이 얇아짐
+                    let w = (p.width || 550) * Math.min(1, p.life * 1.5); 
+                    
+                    if (!GRAPHICS.simpleProjectiles) {
+                        // 공간 왜곡 (반전 효과)
+                        ctx.globalCompositeOperation = 'difference'; 
+                        ctx.fillStyle = "#fff"; 
+                        ctx.fillRect(0, -w/2, len, w);
+                        
+                        // 주변 전기 스파크
+                        ctx.globalCompositeOperation = 'lighter';
+                        ctx.strokeStyle = color; 
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        // 랜덤 스파크 3줄
+                        for(let k=0; k<3; k++) {
+                            let yOff = (Math.random()-0.5) * w;
+                            ctx.moveTo(0, yOff);
+                            ctx.lineTo(len, yOff + (Math.random()-0.5)*100);
+                        }
+                        ctx.stroke();
+                    } else {
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.fillStyle = "#eee"; ctx.fillRect(0, -w/2, len, w);
+                    }
+                    
+                    // 중심부 블랙홀 균열 (가장 늦게 사라짐)
+                    let coreW = w * 0.2 * Math.max(0, p.life);
+                    ctx.fillStyle = "#000"; 
+                    ctx.fillRect(0, -coreW/2, len, coreW);
+                }
 
             ctx.restore();
         }
@@ -5241,7 +5701,9 @@
                 if (Math.hypot(clickX - s.x, clickY - s.y) < 80) { 
                     playSound(sfxStar); 
                     vfxParticles.spawnExplosion(s.x, s.y, s.color, 30, 10);
-                    fragments += 50; updateAllUI();
+                    fragments += 250; updateAllUI();
+                    // ★ [추가] 별의 기운 경험치
+                    addExp(100);
                     shootingStars.splice(i, 1); return; 
                 }
             }
@@ -5264,7 +5726,6 @@
         });
 
         // 8. MAIN RENDER LOOP & WEATHER TRANSITIONS
-        let gameTimeMinutes = 12 * 60; 
         let lastDisplayMin = -1;
         let lastWeatherHour = 12; // 시작 시 중복 실행 방지
         let frameCount = 0; 
@@ -5296,7 +5757,7 @@
             let isMoving = Math.abs(player.vx) > 0.1;
             let animTime = player.walkFrame * 0.1;
             let bounce = isMoving ? Math.abs(Math.sin(animTime)) * 4 : Math.sin(globalRenderTime * 0.04) * 2;
-            let neckY = player.y - 100 + 35 + bounce; // 키(h=100) 고려한 목 위치
+            let neckY = player.y - 75 + bounce; // 키(h=100) 고려한 목 위치
 
             player.scarfSegments[0].x = player.x;
             player.scarfSegments[0].y = neckY;
@@ -5442,9 +5903,69 @@
         }
 
         function render() { 
+            // ★★★ [누락되었던 핵심 코드 추가] ★★★
+            // 이 코드가 없으면 시간(dt)이 0이라서 회복 타이머가 안 올라갑니다.
+            const now = performance.now();
+            dt = (now - lastFrameTime) / 1000; 
+            lastFrameTime = now;
+            
+            // 렉 걸렸을 때 순간이동 방지 (최대 0.1초까지만 인정)
+            if (dt > 0.1) dt = 0.1; 
+            dtFactor = dt * 60; // 60FPS 기준 보정값 (움직임 부드럽게)
+            // ★★★★★★★★★★★★★★★★★★★★★★★
+
             let preciseHour = gameTimeMinutes / 60; 
             hours = Math.floor(preciseHour);
             minutes = Math.floor(gameTimeMinutes % 60);
+
+            // 0. (안전장치) 타이머 변수가 없으면 초기화
+            if (typeof player.noDamageTimer === 'undefined') player.noDamageTimer = 5.0;
+
+            // 1. 무적 시간 감소
+            if (player.invincibleTime > 0) {
+                player.invincibleTime -= 1 * dtFactor;
+                if (player.invincibleTime <= 0) {
+                     player.invincibleTime = 0;
+                     player.opacity = 1;
+                }
+            }
+
+            // 2. [수정됨] 전투 이탈 회복 시스템 (틱 방식)
+            player.noDamageTimer += dt; // 피해 입지 않은 시간 측정
+
+            // 틱 타이머 변수 초기화 (없으면 생성)
+            if (typeof player.regenTimer === 'undefined') player.regenTimer = 0;
+
+            // 조건: "5초 이상 피해 없고" && "체력이 깎여있고" && "살아있음"
+            if (player.noDamageTimer > 5.0 && player.hp > 0 && player.hp < player.maxHp) {
+                
+                player.regenTimer += dt; // 회복 쿨타임 누적
+
+                // ★ 1초(1.0)마다 한 번씩 회복 (틱 발생)
+                if (player.regenTimer >= 5.0) {
+                    
+                    // 회복량 계산: 최대 체력의 5% (최소 1)
+                    let healAmount = Math.ceil(player.maxHp * 0.05);
+                    
+                    player.hp += healAmount;
+                    if(player.hp > player.maxHp) player.hp = player.maxHp;
+
+                    updateProfileUI(); // UI 갱신
+
+                    // ★ 핵심: 회복된 양을 텍스트로 띄움 (예: +15)
+                    spawnDamageText(
+                        player.x - cameraX, 
+                        player.y - currentParallaxY * 50 - 60, 
+                        "+" + healAmount, 
+                        false, 
+                        "#69F0AE" // 밝은 초록색
+                    );
+                    
+                    player.regenTimer = 0; // 틱 타이머 리셋 (다시 1초 셈)
+                }
+            } else {
+                player.regenTimer = 0; // 조건 만족 안 하면 틱 초기화
+            }
 
             if (minutes !== lastDisplayMin) {
                 DOM.time.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
@@ -5731,22 +6252,58 @@
             // ★ [최종 완성] 카메라를 적용한 월드 좌표계 통합 렌더링
             // =======================================================
             
-            // 1. 키보드 이동 물리 연산 (월드 좌표 기준)
-            if (keys.left) { player.vx -= player.accel; player.facingRight = false; player.walkFrame++; }
-            if (keys.right) { player.vx += player.accel; player.facingRight = true; player.walkFrame++; }
-            if (!keys.left && !keys.right) { player.walkFrame = 0; }
+            // -------------------------------------------------------------------
+            // ★ [수정됨] 플레이어 물리 (사망 시 조작 불가 + 부활 카운트)
+            // -------------------------------------------------------------------
+            
+            // -------------------------------------------------------------------
+            // ★ [수정됨] 플레이어 물리 (사망 시 조작 불가 + 부활 카운트)
+            // -------------------------------------------------------------------
+            
+            // 살아있을 때만 움직임 가능
+            if (!player.isDead) {
+                if (keys.left) { player.vx -= player.accel * dtFactor; player.facingRight = false; player.walkFrame += 1 * dtFactor; }
+                if (keys.right) { player.vx += player.accel * dtFactor; player.facingRight = true; player.walkFrame += 1 * dtFactor; }
+                if (!keys.left && !keys.right) { player.walkFrame = 0; }
+                
+                // 마찰력 및 위치 적용
+                player.vx = Math.max(-player.maxSpeed, Math.min(player.vx, player.maxSpeed));
+                player.vx *= Math.pow(player.friction, dtFactor);
+                player.x += player.vx * dtFactor;
 
-            player.vx = Math.max(-player.maxSpeed, Math.min(player.vx, player.maxSpeed));
-            player.vx *= player.friction;
-            player.x += player.vx;
+                // 맵 밖으로 못 나가게
+                if (player.x < 30) player.x = 30; 
+                if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
+                
+                // 지형 높이 추적
+                player.y = getGroundY(player.x); 
 
-            // 월드 맵 끝 충돌 처리
-            if (player.x < 30) player.x = 30;
-            if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
+            } else {
+                // ★ 죽어있는 동안 로직 (움직임 X, 타이머 감소)
+                player.vx = 0; // 멈춤
+                player.walkFrame = 0;
+                
+                player.deathTimer -= dt;
+                
+                // 타이머 텍스트 갱신
+                const dTimer = document.getElementById("respawn-timer");
+                if (dTimer) dTimer.innerText = Math.max(0, player.deathTimer).toFixed(1);
 
-            // 지형 높이 추적
-            let groundY = getGroundY(player.x);
-            player.y = groundY; 
+                // 10초 경과 시 부활
+                if (player.deathTimer <= 0) {
+                    player.isDead = false;
+                    player.hp = player.maxHp;
+                    player.x = WORLD_WIDTH / 2; // 마을 귀환
+                    player.y = getGroundY(player.x);
+                    player.invincibleTime = 180; // 3초 무적
+                    player.noDamageTimer = 0;
+                    
+                    // 오버레이 숨김
+                    document.getElementById("death-overlay").style.display = "none";
+                    showSideNotification("SYSTEM REBOOT", "생체 신호 복구 완료.", "#69F0AE");
+                    updateProfileUI();
+                }
+            }
 
             // 카메라 스크롤 제어
             targetCameraX = Math.max(0, Math.min(player.x - W / 2, WORLD_WIDTH - W));
@@ -5930,15 +6487,6 @@
                     let outerRad = size * 1.4; 
                     let innerRad = size * 0.7; 
 
-                    // 간소화 아닐 때만 후광 그리기
-                    if (!GRAPHICS.simpleAuras) {
-                        let hugeGlow = ctx.createRadialGradient(0,0, size*0.5, 0,0, outerRad*1.5);
-                        hugeGlow.addColorStop(0, color); hugeGlow.addColorStop(1, "transparent");
-                        ctx.fillStyle = hugeGlow;
-                        ctx.globalAlpha = finalAlpha * 0.3;
-                        ctx.beginPath(); ctx.arc(0,0, outerRad*1.5, 0, TWO_PI); ctx.fill();
-                    }
-
                     // 날개
                     ctx.globalAlpha = finalAlpha * 0.9;
                     ctx.lineWidth = 6; ctx.strokeStyle = color;
@@ -6084,6 +6632,23 @@
                 let gY = getGroundY(c.x);
                 c.y = c.typeData.moveType === "float" ? c.y + (gY - 50 - c.y) * 0.05 + Math.sin(c.animTime)*0.5 : gY;
 
+                // [추가됨] 플레이어와 몬스터 충돌 (몸박) 감지
+                if (player.invincibleTime <= 0 && c.hp > 0) {
+                    // x축 거리와 y축 거리(플레이어 키 고려) 계산
+                    let dist = Math.abs(player.x - c.x);
+                    let distY = Math.abs((player.y - 50) - c.y); 
+                    
+                    // 거리가 가까우면 피격 (가로 30, 세로 60 거리 내)
+                    if (dist < 30 && distY < 60) {
+                        // DB에 설정된 damage가 있으면 쓰고, 없으면 기본 10
+                        let dmg = c.typeData.damage || 10;
+                        takeDamage(dmg); 
+
+                        // 넉백 (플레이어가 몬스터보다 왼쪽에 있으면 왼쪽으로 튕김)
+                        player.vx = (player.x < c.x) ? -10 : 10;
+                    }
+                }
+
                 if (c.life <= 0) { critters.splice(i, 1); continue; }
 
                 // [관통 시스템 적용] 투사체 충돌 판정 및 처리 루프
@@ -6146,7 +6711,7 @@
                         if(p.type === 2) baseDamage *= 0.2;
                         if(p.type === 3) baseDamage *= 0.35;
                         if(p.type === 4) baseDamage *= 0.25;
-                        if(p.type === 5) baseDamage *= 0.5;
+                        if(p.type === 5) baseDamage *= 0.4;
                         if(p.type === 6) baseDamage = Math.max(999, baseDamage);
 
                         // ★ 랜덤 난수 (0.8 ~ 1.2배)
@@ -6180,17 +6745,49 @@
                 } // 몬스터 루프 끝
             } // 투사체 루프 끝
 
-                // [수정] 몬스터 사망 처리 부분
+                // [수정] 몬스터 사망 처리 (비선형 경험치 적용 + XP 텍스트 최적화)
                 if (c.hp <= 0) {
-                     playSound(sfxStar);
-                     let drop = c.typeData.drop; 
-                     consumableInv[drop] = (consumableInv[drop] || 0) + 1; 
-                     
-                     // ★ [신규] 아이템 획득 알림 띄우기
-                     spawnItemLog(drop);
+                      playSound(sfxStar);
+                      let drop = c.typeData.drop;
+                      consumableInv[drop] = (consumableInv[drop] || 0) + 1;
+                      
+                      spawnItemLog(drop);
 
-                     if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
-                     critters.splice(i, 1); continue;
+                      // ======================================================
+                      // ★ [핵심 변경] 비선형 경험치 공식 (Quadratic Scaling)
+                      // ======================================================
+                      // 1. 기본 경험치: 체력의 10%
+                      let baseXP = c.maxHp / 10;
+                      
+                      // 2. 보너스 배율: 체력이 5,000 늘어날 때마다 경험치 배율이 1.0배씩 추가됨
+                      // (약한 몹은 1.2배, 강한 몹은 5배~20배 뻥튀기)
+                      let bonusMultiplier = 1 + (c.maxHp / 5000); 
+
+                      // 3. 최종 계산 (소수점 버림)
+                      let xpGain = Math.floor(baseXP * bonusMultiplier);
+
+                      // 최소값 보장 (10 XP)
+                      xpGain = Math.max(10, xpGain);
+                      
+                      addExp(xpGain);
+                      // ======================================================
+
+                      // XP 텍스트 띄우기 (위치: 데미지보다 훨씬 위쪽)
+                      let randomX = (Math.random() - 0.5) * 60; 
+                      
+                      damageLabels.push({
+                        x: c.x - cameraX + randomX, 
+                        y: c.y - currentParallaxY * 50 - 140, // 데미지보다 더 위(-140)
+                        text: `+${xpGain.toLocaleString()} XP`, // 콤마(,) 추가
+                        life: 2.5, // 더 오래 떠있음
+                        vy: -0.5,  // 천천히 우아하게 올라감
+                        scale: 1.3, // 글자 더 큼
+                        isCrit: false, 
+                        customColor: "#00E5FF" // 형광 파랑
+                      });
+
+                      if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
+                      critters.splice(i, 1); continue;
                 }
                 // [수정] 몹 UI 렌더링 (이름표 + HP바) - 높이 자동 조절 적용
                 if (c.x > cameraX - 50 && c.x < cameraX + W + 50) {
@@ -6263,8 +6860,10 @@
                 ctx.strokeStyle = "black";
                 ctx.strokeText(d.text, 0, 0);
 
-                // 글자 색상 (크리티컬: 주황~빨강 / 일반: 노랑~흰색)
-                ctx.fillStyle = d.isCrit ? "#FF5252" : "#FFF176"; 
+                // [수정] 글자 색상 (커스텀 색상(XP) 지원 추가)
+                // d.customColor가 있으면 그걸 쓰고, 없으면 크리티컬/일반 색상 사용
+                ctx.fillStyle = d.customColor ? d.customColor : (d.isCrit ? "#FF5252" : "#FFF176");
+                
                 ctx.fillText(d.text, 0, 0);
                 
                 // (선택사항) 'CRITICAL!' 텍스트 추가
@@ -6305,7 +6904,6 @@
             if (globalRenderTime % 3 === 0) {
                 calcBuffs(); 
             }
-
             requestAnimationFrame(render); 
         }
         render();
@@ -6438,6 +7036,10 @@
 
             restoreBGMWithImpact();
             applyAuraStyle(currentResult); 
+
+            let xpGain = 10 + Math.ceil(Math.sqrt(currentResult.chanceX));
+            addExp(xpGain);
+
             document.getElementById("odds-text").style.display = "block"; 
 
             // ★ [멀티플레이] 100만 분의 1 이상을 뽑으면 전체 서버에 자랑하기!
@@ -6499,23 +7101,35 @@
             document.getElementById("aura-text").style.textShadow = "none"; 
         }
 
-        // ========================================================
-        // 3. ✔ 저장 (Keep) 버튼 클릭 이벤트
-        // ========================================================
+        // [수정] 저장 버튼 (데이터만 넣고 끝! 화면 갱신 안 함 -> 엄청 빠름)
         document.getElementById("btn-keep").addEventListener("click", () => { 
             if (!currentResult) return;
             playSound(sfxSuccess); 
-            inventory.push(currentResult);  
+            
+            // 데이터만 쏙 넣음
+            inventory.push(currentResult); 
+            
+            // 알림만 띄워줌 (사용자 피드백)
+            spawnItemLog(currentResult.name); // (이 함수가 없다면 생략 가능)
+            
             resetRollState(); 
         });
 
-        // ========================================================
-        // 4. ✖ 분해 (Discard) 버튼 클릭 이벤트
-        // ========================================================
+        // [수정] 분해 버튼 (돈만 올리고 끝!)
         document.getElementById("btn-discard").addEventListener("click", () => { 
             if (!currentResult) return;
             playSound(sfxClick); 
-            fragments += Math.max(1, Math.ceil(currentResult.chanceX / 10)); 
+            
+            // 돈 계산 및 추가
+            let frags = Math.max(1, Math.ceil(currentResult.chanceX / 10));
+            fragments += frags; 
+
+            // ★ [추가] 즉시 분해 경험치
+            addExp(frags * 0.5);
+            
+            // ★ 상단 돈(Fragments) 표시는 항상 보여야 하니까 이것만 갱신
+            document.getElementById("currency-display").textContent = `✨ Stella Fragment: ${fragments.toLocaleString()}`;
+            
             resetRollState(); 
         });
 
