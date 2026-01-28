@@ -568,6 +568,48 @@
             }
         }
 
+        /* [수정] 아이템 획득 로그 시스템 (위치 조정 & 디자인 심플화) */
+        #item-log-container {
+            position: absolute;
+            top: 160px; /* ★ 70px -> 160px로 변경 (상단 버튼들과 안 겹치게 내림) */
+            right: 20px;
+            width: auto; /* 너비 자동 (글자만큼만 차지) */
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end; /* 오른쪽 정렬 */
+            gap: 5px;
+            pointer-events: none;
+            z-index: 80;
+        }
+
+        .item-log {
+            /* 배경을 더 연하게, 텍스트 위주로 변경 */
+            background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.6));
+            color: #ddd;
+            padding: 5px 15px;
+            border-radius: 20px; /* 둥글게 */
+            font-size: 0.9rem;
+            font-family: 'Noto Sans KR', sans-serif;
+            font-weight: 600;
+            
+            /* 애니메이션 */
+            animation: slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: opacity 0.5s, transform 0.5s;
+            opacity: 1;
+            
+            text-shadow: 0 1px 2px black;
+        }
+
+        .item-log.fade-out {
+            opacity: 0;
+            transform: translateY(-10px); /* 위로 스르륵 사라짐 */
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
     </style>
     <script>
     // !function() { function detectDevTool(allow) { if(isNaN(+allow)) allow = 100; var start = +new Date(); debugger; var end = +new Date(); if(isNaN(start) || isNaN(end) || end - start > allow) { document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s" } } if(window.attachEvent) { if (document.readyState === "complete" || document.readyState === "interactive") { detectDevTool(); window.attachEvent('onresize', detectDevTool); window.attachEvent('onmousemove', detectDevTool); window.attachEvent('onfocus', detectDevTool); window.attachEvent('onblur', detectDevTool); } else { setTimeout(argument.callee, 0); } } else { window.addEventListener('load', detectDevTool); window.addEventListener('resize', detectDevTool); window.addEventListener('mousemove', detectDevTool); window.addEventListener('focus', detectDevTool); window.addEventListener('blur', detectDevTool); } }();
@@ -654,6 +696,8 @@
             <span id="buff-luck">🍀 행운: x1.00</span>
             <span id="buff-speed">⚡ 속도: x1.00</span>
         </div>
+
+        <div id="item-log-container"></div>
         
         <button id="roll-bottom-toggle" class="interactive" onclick="toggleRollBottom()">▲ ROLL</button>
         <div id="roll-bottom-bar" class="glass-panel">
@@ -803,54 +847,57 @@
 
             playSound(sfxClick); 
 
-            // 3. 투사체 생성 (내 공격과 동일한 고퀄리티 이펙트 적용)
-            // [티어 1] 💫 유성탄 (경쾌한 단발)
+            // [티어 1] 💫 유성탄
             if (chance < 1000) { 
+                playSound(COMBAT_SFX.attack_1); // 🎵 푝!
                 projectiles.push({ type: 1, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
             }
-            // [티어 2] ⚔️ 쌍검기 (나란히 날아가는 두 검기)
+            // [티어 2] ⚔️ 쌍검기
             else if (chance < 1000000) { 
+                playSound(COMBAT_SFX.attack_2); // 🎵 슉!
                 for (let i of [-1, 1]) {
-                    let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
-                    let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
-                    projectiles.push({ type: 2, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
+                    // ... (기존 쌍검 생성 코드) ...
+                     let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
+                     let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
+                     projectiles.push({ type: 2, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
                 }
             }
-            // [티어 3] ⚡ 하이퍼 레이저 (관통형 빔)
+            // [티어 3] ⚡ 하이퍼 레이저
             else if (chance < 100000000) { 
+                playSound(COMBAT_SFX.attack_3); // 🎵 지이잉!
                 projectiles.push({ type: 3, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
                 shakeIntensity = 15; applyScreenShake();
             }
-            // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 투척)
+            // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 5연발)
             else if (chance < 1000000000) { 
+                // 기존 for문이나 playSound 다 지우고 이걸로 교체!
                 for(let i=0; i<5; i++) {
                     setTimeout(() => {
+                        // ★ 등 뒤에 있던 검 5개가 하나씩 날아가는 사운드!
+                        let soundClone = COMBAT_SFX.attack_4.cloneNode();
+                        soundClone.volume = 0.6;
+                        soundClone.play().catch(()=>{});
+
                         let spread = (i - 2) * 0.12; 
                         let sAngle = angle + spread;
+                        // 투사체 발사
                         projectiles.push({ type: 4, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
-                    }, i * 60); 
+                    }, i * 60); // 0.06초 간격으로 다다다닥!
                 }
                 shakeIntensity = 20; applyScreenShake();
             }
-            // [티어 5] 🌀 아케인 차크람 (관통형 단발)
+            // [티어 5] 🌀 아케인 차크람
             else if (chance < 2400000000) { 
+                playSound(COMBAT_SFX.attack_5); // 🎵 촤라락!
                 projectiles.push({ 
-                    type: 5, 
-                    x: startX, 
-                    y: startY, 
-                    vx: spdX * 12, // 속도를 조금 더 시원하게 상향
-                    vy: spdY * 12, 
-                    angle, 
-                    life: 4.5, 
-                    color, 
-                    size: 140,
-                    rarity: chance,
-                    hitMobiles: [] // ★ [추가] 이 투사체에 맞은 몹들의 ID를 기록할 리스트
+                    type: 5, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
+                    angle, life: 4.5, color, size: 140, rarity: chance, hitMobiles: [] 
                 });
                 shakeIntensity = 35; applyScreenShake();
             }
-            // [티어 6] 🌌 차원 절단 (화면 끝까지 베기)
+            // [티어 6] 🌌 차원 절단
             else { 
+                playSound(COMBAT_SFX.attack_6); // 🎵 콰아앙!
                 projectiles.push({ type: 6, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
                 shakeIntensity = 70; applyScreenShake();
             }
@@ -1839,6 +1886,26 @@
         const sfxMeteorFriction = document.getElementById("sfx-meteor-friction");
         const sfxFlashbangRing = document.getElementById("sfx-flashbang-ring");
 
+        // ==========================================
+        // ★ [신규] 티어별 공격 & 피격 사운드 DB
+        // ==========================================
+        const COMBAT_SFX = {
+            // 공격 사운드 (스킬별)
+            attack_1: new Audio('sfx/atk_bullet.mp3'),   // 티어1: 푝! (탄막)
+            attack_2: new Audio('sfx/atk_slash.mp3'),    // 티어2: 슉! (쌍검)
+            attack_3: new Audio('sfx/atk_laser.mp3'),    // 티어3: 징-! (레이저)
+            attack_4: new Audio('sfx/atk_holy.mp3'),     // 티어4: 칭! (성검)
+            attack_5: new Audio('sfx/atk_chakram.mp3'),  // 티어5: 촤라락! (차크람)
+            attack_6: new Audio('sfx/atk_void.mp3'),     // 티어6: 콰아앙! (차원절단)
+
+            // 피격 사운드
+            hit_normal: new Audio('sfx/hit_normal.mp3'), // 일반: 퍽
+            hit_crit: new Audio('sfx/hit_crit.mp3')      // 크리티컬: 콰직!
+        };
+
+        // 사운드 볼륨 조절 (너무 시끄러우면 여기서 조절)
+        Object.values(COMBAT_SFX).forEach(audio => audio.volume = 0.9);
+
         // 💡 [신규] 천만 분의 1 이상 초희귀 오라 전용 등장 대사 (총 80종)
         function getAuraQuote(name) {
             const quotes = {
@@ -2006,21 +2073,36 @@
             body: document.body
         };
 
+        // ★ [신규] 데미지 폰트 시스템
+        let damageLabels = []; // 데미지 숫자들 저장소
+
+        function spawnDamageText(x, y, damage, isCrit) {
+            damageLabels.push({
+                x: x, 
+                y: y - 20, // 머리 위에서 시작
+                text: damage.toFixed(1), // 소수점 1자리까지
+                life: 1.0, // 수명
+                vy: -3, // 위로 솟구치는 속도
+                isCrit: isCrit, // 크리티컬 여부
+                scale: isCrit ? 1.5 : 1.0 // 크리티컬이면 글자 커짐
+            });
+        }
+
         // ==========================================
         // ★ [최종 기믹] 날씨별 몬스터 (Critters) DB
         // ==========================================
         let critters = []; // 화면에 돌아다니는 몹 배열
 
         const CRITTER_DB = {
-            "clear": { name: "햇살 다람쥐", color: "#FFCA28", drop: "nut_light", size: 15, speed: 1.3, hp: 10, moveType: "hop", uiHeight: 5.5 }, 
-            "rain":  { name: "비구름 개구리", color: "#66BB6A", drop: "frog_skin", size: 14, speed: 1.6, hp: 12, moveType: "hop", uiHeight: 3.5 },
-            "snow":  { name: "눈토끼", color: "#FFFFFF", drop: "rabbit_fur", size: 16, speed: 1.8, hp: 15, moveType: "hop", uiHeight: 4.0 },
-            "wind":  { name: "바람 정령", color: "#B2DFDB", drop: "spirit_wing", size: 18, speed: 1.9, hp: 25, moveType: "float", uiHeight: 4.5 },
-            "thunder": { name: "전기 도마뱀", color: "#FBC02D", drop: "volt_scale", size: 14, speed: 2.0, hp: 30, moveType: "dash", uiHeight: 3.0 },
-            "foggy": { name: "안개 요정", color: "#CFD8DC", drop: "fairy_dust", size: 12, speed: 1.2, hp: 20, moveType: "float", uiHeight: 4.0 },
-            "eclipse": { name: "그림자 까마귀", color: "#1A1A1A", drop: "shadow_beak", size: 18, speed: 2.4, hp: 70, moveType: "float", uiHeight: 4.5 },
-            "blood-moon": { name: "핏빛 박쥐", color: "#D32F2F", drop: "blood_fang", size: 15, speed: 2.7, hp: 70, moveType: "float", uiHeight: 4.0 },
-            "glitch": { name: "V̵O̵I̵D̵_B̴U̷G̸", color: "#00E5FF", drop: "core_glitch", size: 20, speed: 3.5, hp: 250, moveType: "glitch", uiHeight: 5.5 }
+            "clear": { name: "햇살 다람쥐", color: "#FFCA28", drop: "nut_light", size: 15, speed: 1.3, hp: 2000, moveType: "hop", uiHeight: 5.5 }, 
+            "rain":  { name: "비구름 개구리", color: "#66BB6A", drop: "frog_skin", size: 14, speed: 1.6, hp: 2400, moveType: "hop", uiHeight: 3.5 },
+            "snow":  { name: "눈토끼", color: "#FFFFFF", drop: "rabbit_fur", size: 16, speed: 1.8, hp: 3000, moveType: "hop", uiHeight: 4.0 },
+            "wind":  { name: "바람 정령", color: "#B2DFDB", drop: "spirit_wing", size: 18, speed: 1.9, hp: 5000, moveType: "float", uiHeight: 4.5 },
+            "thunder": { name: "전기 도마뱀", color: "#FBC02D", drop: "volt_scale", size: 14, speed: 2.0, hp: 5400, moveType: "dash", uiHeight: 3.0 },
+            "foggy": { name: "안개 요정", color: "#CFD8DC", drop: "fairy_dust", size: 12, speed: 1.2, hp: 4600, moveType: "float", uiHeight: 4.0 },
+            "eclipse": { name: "그림자 까마귀", color: "#1A1A1A", drop: "shadow_beak", size: 18, speed: 2.4, hp: 24000, moveType: "float", uiHeight: 4.5 },
+            "blood-moon": { name: "핏빛 박쥐", color: "#D32F2F", drop: "blood_fang", size: 15, speed: 2.7, hp: 24000, moveType: "float", uiHeight: 4.0 },
+            "glitch": { name: "V̵O̵I̵D̵_B̴U̷G̸", color: "#00E5FF", drop: "core_glitch", size: 20, speed: 3.5, hp: 100000, moveType: "glitch", uiHeight: 5.5 }
         };
 
         // ==========================================
@@ -2055,8 +2137,6 @@
                 // 현재 날씨의 기준 파티클 수 * 설정 비율로 목표치 재설정
                 applyNewWeather(currentWeather); 
             }
-
-            saveGame(); // 변경 사항 저장
         }
 
         // ==========================================
@@ -2333,6 +2413,36 @@
             document.getElementById("buff-display").innerHTML = buffText + `<span id="buff-luck">🍀 행운: x${globalLuckMultiplier.toFixed(2)}</span><span id="buff-speed">⚡ 속도: x${globalSpeedMultiplier.toFixed(2)}</span>`; 
         }
 
+        // [수정] 아이템 획득 알림 함수 (심플 버전)
+        function spawnItemLog(itemKey) {
+            const container = document.getElementById("item-log-container");
+            const itemData = consumableDB[itemKey];
+            if (!container || !itemData) return;
+
+            const div = document.createElement("div");
+            div.className = "item-log";
+            
+            // ★ 텍스트 포맷 변경: (+ 아이템이름)
+            div.innerHTML = `<span style="color:#aaa; margin-right:4px;">(+</span><span style="color:${itemData.color};">${itemData.name}</span><span style="color:#aaa;">)</span>`;
+
+            // 위에 쌓이게 하려면 prepend, 아래로 쌓이게 하려면 append
+            // "한 칸씩 아래로 밀리면서" -> 위에서 새로 생기고 기존 것이 내려감 (prepend)
+            // 혹은 아래에 추가되고 위로 올라감? 보통 로그는 최신이 맨 아래거나 맨 위.
+            // 여기서는 '아래로 밀린다'는 표현에 맞춰 prepend(맨 위에 추가)를 써서 기존 것을 밀어내겠습니다.
+            container.appendChild(div); 
+
+            // 최대 10개 유지
+            if (container.children.length > 10) {
+                container.removeChild(container.firstChild);
+            }
+
+            // 2초 뒤 페이드 아웃 (조금 더 빨리 사라지게)
+            setTimeout(() => {
+                div.classList.add("fade-out");
+                setTimeout(() => { if(div.parentElement) div.remove(); }, 500);
+            }, 2000);
+        }
+
 
         window.toggleModal = function(id, show) { playSound(sfxClick); const modal = document.getElementById(id); if (show) { modal.style.zIndex = 9999; modal.classList.add('active'); } else modal.classList.remove('active'); };
 
@@ -2344,7 +2454,6 @@
             } else {
                 equippedAuraName = name; // 아니면 장착
             }
-            saveGame(); // 저장 및 UI 갱신
         };
 
         // 💡 [수정] renderInventory() 함수 내부의 list.innerHTML += `...` 부분 수정
@@ -2422,8 +2531,6 @@
             if (equippedAuraName === name && countAura(name) === 0) {
                 equippedAuraName = null;
             }
-
-            saveGame(); 
         };
 
         function renderConsumableList() { const list = document.getElementById("consumable-list"); list.innerHTML = ""; Object.entries(consumableInv).forEach(([key, count]) => { if(count <= 0) return; let item = consumableDB[key]; if(!item) return; list.innerHTML += `<div class="item-card"><div><div class="item-name" style="color:${item.color}">${item.name} <span style="float:right;">x${count}</span></div><div class="item-desc">${item.desc}</div></div><button class="action-sm-btn btn-alchemy" onclick="useConsumable('${key}')" style="pointer-events:auto;">사용하기</button></div>`; }); }
@@ -2466,7 +2573,7 @@
 
                 if(applied) {
                     playSound(sfxEquip); consumableInv[key]--; 
-                    saveGame(); calcBuffs();
+                    calcBuffs();
                 }
             } 
         };
@@ -3527,95 +3634,69 @@
             return lerp(p1.y, p2.y, t);
         }
 
-        // [최적화] 몬스터 그리기 함수 (간소화 옵션 지원)
+        // ★ [최종 수정] 몬스터 그리기 (피격 시 화이트 플래시 적용)
         function drawCritterSprite(ctx, c) {
             const size = c.typeData.size || 15;
-            const isHit = c.hitTime > 0;
+            const isHit = c.hitTime > 0; // 맞았는지 확인
             const baseColor = c.typeData.color;
             const id = c.typeData.drop; 
             const time = globalRenderTime * 0.05; 
             const fastTime = globalRenderTime * 0.2;
 
-            // ★ [간소화 모드 체크]
+            // 간소화 모드면 그냥 기존대로 (성능 위해)
             const isSimple = (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleMobs);
 
             ctx.save();
             ctx.translate(0, -size); 
 
-            // ============================================================
-            // 1. 맞았을 때 (Hit Effect)
-            // ============================================================
-            if (isHit) {
-                // 간소화 모드면 그림자 끄고 단순 흰색 원만 그림
-                ctx.shadowBlur = isSimple ? 0 : 40; 
-                ctx.shadowColor = isSimple ? "transparent" : baseColor;
-                ctx.fillStyle = "#FFFFFF";
-                
-                ctx.beginPath();
-                // 타격감을 위해 살짝 키움
-                ctx.arc(0, 0, size * (isSimple ? 1.0 : 1.2), 0, Math.PI * 2); 
-                ctx.fill();
-                
-                ctx.restore();
-                return; // ★ 여기서 그리기 끝 (성능 최적화 핵심)
-            }
-
-            // ============================================================
-            // 2. 평상시 모습 (Normal State)
-            // ============================================================
-            
-            // ★ [A] 간소화 모드: 그냥 색깔 있는 원 하나만 그림 (매우 빠름)
+            // [간소화 모드] 그냥 원 그리기
             if (isSimple) {
-                ctx.fillStyle = baseColor;
-                ctx.strokeStyle = baseColor;
+                ctx.fillStyle = isHit ? "#FFFFFF" : baseColor; // 맞으면 흰색
+                ctx.strokeStyle = ctx.fillStyle;
                 ctx.lineWidth = 2;
-                
-                // 단순 원
-                ctx.beginPath();
-                ctx.arc(0, 0, size, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 외곽선 (구분을 위해)
-                ctx.stroke();
-
-                // 몬스터 종류 구분을 위한 약식 텍스트 (선택 사항)
-                // ctx.fillStyle = "#000";
-                // ctx.font = "10px sans-serif";
-                // ctx.textAlign = "center";
-                // ctx.fillText(c.typeData.name[0], 0, 4); 
-
+                ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
                 ctx.restore();
-                return; 
+                return;
             }
 
-            // ★ [B] 일반 모드: 기존의 화려한 몬스터 그림 (기존 코드 유지)
-            
-            ctx.shadowBlur = 15;
+            // [일반 모드] 스프라이트 그리기
+            // ★ 핵심: 맞았으면 그림자 제거, 아니면 원래 색 그림자
+            ctx.shadowBlur = isHit ? 0 : 15;
             ctx.shadowColor = baseColor;
-            ctx.fillStyle = baseColor;
-            ctx.strokeStyle = baseColor;
+            
+            // ★ 색상 도우미 함수: 맞았으면 무조건 흰색 리턴
+            const getColor = (normalColor) => isHit ? "#FFFFFF" : normalColor;
+            
+            // 기본 스타일 설정
+            ctx.fillStyle = getColor(baseColor);
+            ctx.strokeStyle = getColor(baseColor);
 
             // 1. 🐿️ 햇살 다람쥐
             if (id === "nut_light") {
                 ctx.save();
                 ctx.rotate(Math.sin(time) * 0.15);
+                
+                // 꼬리 그라데이션
                 let tailGrad = ctx.createLinearGradient(-size*2, 0, 0, -size*3);
-                tailGrad.addColorStop(0, "#E65100");
-                tailGrad.addColorStop(1, "#FFB300");
-                ctx.fillStyle = tailGrad;
+                tailGrad.addColorStop(0, "#E65100"); tailGrad.addColorStop(1, "#FFB300");
+                ctx.fillStyle = getColor(tailGrad); // ★ 그라데이션도 흰색으로 치환됨
+                
                 ctx.beginPath();
                 ctx.moveTo(0, size * 0.5);
                 ctx.bezierCurveTo(-size * 5, size * 0.5, -size * 4, -size * 5, 0, -size * 4);
                 ctx.bezierCurveTo(size * 1.5, -size * 3, size * 2.5, size, 0, size * 0.5);
                 ctx.fill();
                 ctx.restore();
-                ctx.fillStyle = baseColor;
+
+                ctx.fillStyle = getColor(baseColor);
                 ctx.beginPath(); ctx.ellipse(0, 0, size * 1.1, size * 1.3, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(size*0.3, -size * 1.3, size * 0.8, 0, TWO_PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(size*0.3, -size * 1.3, size * 0.8, 0, Math.PI*2); ctx.fill();
+                
                 for(let s of [-1, 1]) {
                     ctx.save(); ctx.translate(s*size*0.3 + size*0.3, -size*1.8);
-                    ctx.beginPath(); ctx.ellipse(0, 0, size*0.25, size*0.6, s*0.2, 0, TWO_PI); ctx.fill();
-                    ctx.fillStyle="#FFAB91"; ctx.beginPath(); ctx.ellipse(0, 0, size*0.1, size*0.4, s*0.2, 0, TWO_PI); ctx.fill();
+                    ctx.beginPath(); ctx.ellipse(0, 0, size*0.25, size*0.6, s*0.2, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle=getColor("#FFAB91"); 
+                    ctx.beginPath(); ctx.ellipse(0, 0, size*0.1, size*0.4, s*0.2, 0, Math.PI*2); ctx.fill();
                     ctx.restore();
                 }
             }
@@ -3623,92 +3704,118 @@
             else if (id === "frog_skin") {
                 let frogGrad = ctx.createRadialGradient(0, -size*0.5, size*0.2, 0, 0, size*1.5);
                 frogGrad.addColorStop(0, baseColor); frogGrad.addColorStop(1, "#1B5E20");
-                ctx.fillStyle = frogGrad; ctx.beginPath(); ctx.ellipse(0, 0, size*1.5, size*0.8, 0, 0, TWO_PI); ctx.fill();
-                ctx.lineWidth = 5; ctx.strokeStyle = baseColor;
+                
+                ctx.fillStyle = getColor(frogGrad);
+                ctx.beginPath(); ctx.ellipse(0, 0, size*1.5, size*0.8, 0, 0, Math.PI*2); ctx.fill();
+                
+                ctx.lineWidth = 5; ctx.strokeStyle = getColor(baseColor);
                 for(let i=0; i<2; i++) {
                     let side = i === 0 ? -1 : 1;
-                    ctx.beginPath(); ctx.arc(side*size*0.8, size*0.2, size*0.6, 0, TWO_PI); ctx.fill();
+                    ctx.beginPath(); ctx.arc(side*size*0.8, size*0.2, size*0.6, 0, Math.PI*2); ctx.fill();
                     ctx.beginPath(); ctx.moveTo(side*size, size*0.5); ctx.lineTo(side*size*1.5, size*0.8); ctx.stroke();
                 }
                 for(let s of [-1, 1]) {
                     ctx.save(); ctx.translate(s*size*0.7, -size*0.8);
-                    ctx.beginPath(); ctx.arc(0, 0, size*0.6, 0, TWO_PI); ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, size*0.6, 0, Math.PI*2); ctx.fill();
                     ctx.restore();
                 }
             }
             // 3. 🐰 눈꽃토끼
             else if (id === "rabbit_fur") {
-                ctx.fillStyle = baseColor;
+                ctx.fillStyle = getColor(baseColor);
                 for(let i=0; i<5; i++) {
                     let ang = (i / 5) * Math.PI * 2;
-                    ctx.beginPath(); ctx.arc(Math.cos(ang)*size*0.3 - size, Math.sin(ang)*size*0.3 + size*0.5, size*0.45, 0, TWO_PI); ctx.fill();
+                    ctx.beginPath(); ctx.arc(Math.cos(ang)*size*0.3 - size, Math.sin(ang)*size*0.3 + size*0.5, size*0.45, 0, Math.PI*2); ctx.fill();
                 }
                 let bunnyGrad = ctx.createRadialGradient(-size*0.3, -size*0.3, size*0.2, 0, 0, size*1.8);
                 bunnyGrad.addColorStop(0, "#FFFFFF"); bunnyGrad.addColorStop(1, "#CFD8DC");
-                ctx.fillStyle = bunnyGrad; ctx.beginPath(); ctx.moveTo(-size, size); ctx.bezierCurveTo(-size*1.8, -size*2, size*1.8, -size*2, size, size); ctx.fill();
+                
+                ctx.fillStyle = getColor(bunnyGrad);
+                ctx.beginPath(); ctx.moveTo(-size, size); ctx.bezierCurveTo(-size*1.8, -size*2, size*1.8, -size*2, size, size); ctx.fill();
                 for(let s of [-1, 1]) {
-                    ctx.save(); ctx.translate(s*size*0.4, -size*1.2); ctx.rotate(s*0.2 + Math.sin(time)*0.1); ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.3, size*1.1, 0, 0, TWO_PI); ctx.fill();
-                    ctx.fillStyle="#F8BBD0"; ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.15, size*0.8, 0, 0, TWO_PI); ctx.fill();
+                    ctx.save(); ctx.translate(s*size*0.4, -size*1.2); ctx.rotate(s*0.2 + Math.sin(time)*0.1); 
+                    ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.3, size*1.1, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle=getColor("#F8BBD0"); 
+                    ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.15, size*0.8, 0, 0, Math.PI*2); ctx.fill();
                     ctx.restore();
                 }
-                ctx.fillStyle="#F06292"; ctx.beginPath(); ctx.arc(size*0.6, -size*0.3, 3, 0, TWO_PI); ctx.fill();
-                ctx.strokeStyle="rgba(0,0,0,0.1)"; ctx.lineWidth=1;
+                ctx.fillStyle=getColor("#F06292"); ctx.beginPath(); ctx.arc(size*0.6, -size*0.3, 3, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle=getColor("rgba(0,0,0,0.1)"); ctx.lineWidth=1;
                 for(let i=-1; i<=1; i++) { ctx.beginPath(); ctx.moveTo(size*0.6, -size*0.3); ctx.lineTo(size*1.2, -size*0.3 + i*5); ctx.stroke(); }
             }
             // 4. 🌪️ 바람 정령
             else if (id === "spirit_wing") {
                 ctx.save();
                 for(let i=0; i<4; i++) {
-                    ctx.rotate(time * (i%2?1:-1) + i); ctx.strokeStyle = baseColor; ctx.lineWidth = 2; ctx.globalAlpha = 0.4;
-                    ctx.beginPath(); ctx.ellipse(0, 0, size*(1.5+i*0.2), size*(0.5+i*0.1), 0, 0, TWO_PI); ctx.stroke();
+                    ctx.rotate(time * (i%2?1:-1) + i); 
+                    ctx.strokeStyle = getColor(baseColor); 
+                    ctx.lineWidth = 2; 
+                    // 맞았을 때는 투명도 없이 완전 하얗게
+                    ctx.globalAlpha = isHit ? 1.0 : 0.4; 
+                    ctx.beginPath(); ctx.ellipse(0, 0, size*(1.5+i*0.2), size*(0.5+i*0.1), 0, 0, Math.PI*2); ctx.stroke();
                 }
                 ctx.restore();
-                let coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size); coreGrad.addColorStop(0, "#FFF"); coreGrad.addColorStop(1, "transparent");
-                ctx.fillStyle = coreGrad; ctx.beginPath(); ctx.arc(0, 0, size, 0, TWO_PI); ctx.fill();
+                let coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size); 
+                coreGrad.addColorStop(0, "#FFF"); coreGrad.addColorStop(1, "transparent");
+                ctx.fillStyle = getColor(coreGrad);
+                ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI*2); ctx.fill();
             }
             // 5. 🦎 전기 도마뱀
             else if (id === "volt_scale") {
+                ctx.fillStyle = getColor(baseColor);
                 ctx.beginPath(); ctx.moveTo(-size, 0); ctx.quadraticCurveTo(0, -size*1.5, size*2, 0); ctx.quadraticCurveTo(0, size, -size, 0); ctx.fill();
-                ctx.strokeStyle="rgba(0,0,0,0.2)"; ctx.lineWidth=1; for(let x=-size; x<size; x+=5) { ctx.beginPath(); ctx.moveTo(x, -size*0.5); ctx.lineTo(x+5, size*0.5); ctx.stroke(); }
-                ctx.shadowBlur = 30; ctx.lineWidth = 6; ctx.lineJoin = "round";
+                ctx.strokeStyle=getColor("rgba(0,0,0,0.2)"); ctx.lineWidth=1; 
+                for(let x=-size; x<size; x+=5) { ctx.beginPath(); ctx.moveTo(x, -size*0.5); ctx.lineTo(x+5, size*0.5); ctx.stroke(); }
+                
+                ctx.shadowBlur = isHit ? 0 : 30; ctx.lineWidth = 6; ctx.lineJoin = "round";
+                ctx.strokeStyle = getColor(baseColor);
                 ctx.beginPath(); ctx.moveTo(-size*0.8, 0); ctx.lineTo(-size*2, -size); ctx.lineTo(-size*2.5, 0); ctx.lineTo(-size*4, -size*1.5); ctx.stroke();
             }
             // 6. 🧚 안개 요정
             else if (id === "fairy_dust") {
                 let flap = Math.sin(fastTime) * 0.5;
-                ctx.save(); ctx.globalAlpha = 0.5;
+                ctx.save(); 
+                ctx.globalAlpha = isHit ? 1.0 : 0.5;
+                ctx.fillStyle = getColor(baseColor);
                 for(let s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(s*size*3, -size*3*flap, s*size*3, size*2, 0, 0); ctx.fill(); }
                 ctx.restore();
-                ctx.beginPath(); ctx.arc(0, 0, size*0.5, 0, TWO_PI); ctx.fill();
+                ctx.fillStyle = getColor(baseColor);
+                ctx.beginPath(); ctx.arc(0, 0, size*0.5, 0, Math.PI*2); ctx.fill();
             }
             // 7. 🐦‍⬛ 그림자 까마귀
             else if (id === "shadow_beak") {
                 let flap = Math.sin(fastTime) * size;
+                ctx.fillStyle = getColor(baseColor);
                 for(let s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, -size*0.5); ctx.quadraticCurveTo(s*size*3, -size*2 + flap, s*size*1.5, size); ctx.lineTo(0, 0); ctx.fill(); }
-                ctx.beginPath(); ctx.arc(0, -size*1.2, size*0.8, 0, TWO_PI); ctx.fill();
-                ctx.beginPath(); ctx.ellipse(0, 0, size*0.8, size*1.3, 0, 0, TWO_PI); ctx.fill();
-                ctx.fillStyle="#FF9100"; ctx.beginPath(); ctx.moveTo(size*0.6, -size*1.3); ctx.lineTo(size*1.8, -size*1.1); ctx.lineTo(size*0.6, -size*0.9); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, -size*1.2, size*0.8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(0, 0, size*0.8, size*1.3, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle=getColor("#FF9100"); 
+                ctx.beginPath(); ctx.moveTo(size*0.6, -size*1.3); ctx.lineTo(size*1.8, -size*1.1); ctx.lineTo(size*0.6, -size*0.9); ctx.fill();
             }
             // 8. 🦇 핏빛 박쥐
             else if (id === "blood_fang") {
                 let flap = Math.abs(Math.sin(fastTime)) * size * 1.5;
+                ctx.fillStyle = getColor(baseColor);
                 ctx.beginPath(); ctx.moveTo(0, -size);
                 for(let s of [1, -1]) { ctx.bezierCurveTo(s*size*2, -size*2.5 + flap, s*size*4, size*flap*0.1, s*size, size); ctx.lineTo(0, 0); }
-                ctx.fill(); ctx.beginPath(); ctx.arc(0, -size*0.5, size*0.7, 0, TWO_PI); ctx.fill();
-                ctx.fillStyle="#FFF"; ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(-1, 5); ctx.lineTo(1, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(1, 5); ctx.lineTo(-1, 0); ctx.fill();
+                ctx.fill(); ctx.beginPath(); ctx.arc(0, -size*0.5, size*0.7, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle=getColor("#FFF"); 
+                ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(-1, 5); ctx.lineTo(1, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(1, 5); ctx.lineTo(-1, 0); ctx.fill();
             }
             // 9. 👾 V̵O̵I̵D̵_B̴U̷G̸
             else if (id === "core_glitch") {
                 for(let i=0; i<12; i++) {
-                    ctx.fillStyle = Math.random() < 0.5 ? "#FF003C" : "#00FFFF";
+                    ctx.fillStyle = getColor(Math.random() < 0.5 ? "#FF003C" : "#00FFFF");
                     let w = Math.random()*size*4, h = 2 + Math.random()*5;
                     ctx.fillRect((Math.random()-0.5)*size*5, (Math.random()-0.5)*size*5, w, h);
                 }
-                ctx.fillStyle = "#FFF"; ctx.font = "bold 20px monospace"; ctx.fillText(Math.random().toString(16).slice(2, 4), -10, 0);
+                ctx.fillStyle = getColor("#FFF"); 
+                ctx.font = "bold 20px monospace"; ctx.fillText(Math.random().toString(16).slice(2, 4), -10, 0);
             }
             // 나머지 (예외 처리)
             else {
-                 ctx.beginPath(); ctx.arc(0, 0, size, 0, TWO_PI); ctx.fill();
+                 ctx.fillStyle = getColor(baseColor);
+                 ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI*2); ctx.fill();
             }
 
             ctx.restore();
@@ -4658,7 +4765,7 @@
             // (10-1) 투사체
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let p = projectiles[i];
-                let lifeDecay = (p.type === 3 || p.type === 6) ? 0.12 : 0.025;
+                let lifeDecay = (p.type === 3 || p.type === 6) ? 0.01 : 0.025;
                 p.life -= lifeDecay * dtFactor;
                 p.x += (p.vx || 0) * dtFactor; 
                 p.y += (p.vy || 0) * dtFactor;
@@ -4687,23 +4794,53 @@
                         if (distSq < (cSize + (p.size||20))**2) isHit = true;
                     }
 
+                    // [수정] 몬스터 피격 처리 (랜덤 데미지 + 메이플 스타일 숫자)
                     if (isHit) {
+                        // 1. 타격 이펙트 (간소화 모드 체크)
                         if (!GRAPHICS.simpleProjectiles) {
                             if(globalRenderTime % 5 === 0) playSound(sfxSuccess);
                             vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", 5, 5);
                         }
-                        let dmg = (p.rarity || 1) / 2000;
-                        if(p.type===6) dmg = Math.max(999, dmg);
-                        c.hp -= dmg;
-                        c.hitTime = 10;
-                        c.x += Math.cos(p.angle || 0) * 5; 
 
+                        // 2. ★ 데미지 랜덤 계산 (핵심)
+                        let baseDamage = (p.rarity || 1) / 10;
+                        
+                        // 타입별 보정
+                        if(p.type === 1) baseDamage *= 0.3;
+                        if(p.type === 2) baseDamage *= 0.2;
+                        if(p.type === 3) baseDamage *= 0.35;
+                        if(p.type === 4) baseDamage *= 0.25;
+                        if(p.type === 5) baseDamage *= 0.5;
+                        if(p.type === 6) baseDamage = Math.max(999, baseDamage);
+
+                        // ★ 랜덤 난수 (0.8 ~ 1.2배)
+                        let variance = 0.8 + Math.random() * 0.4; 
+                        let finalDamage = baseDamage * variance;
+                        
+                        // 크리티컬 판정 (1.1배 이상 터지면 크리!)
+                        let isCrit = variance > 1.1;
+
+                        if (globalRenderTime % 3 === 0) {
+                            if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
+                            else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
+                        }
+
+                        // 3. 체력 깎기
+                        c.hp -= finalDamage; 
+                        c.hitTime = 10; 
+                        c.x += Math.cos(p.angle || 0) * 5; // 넉백
+
+                        // 4. ★ 데미지 숫자 띄우기 (화면 좌표 기준)
+                        spawnDamageText(c.x - cameraX, c.y - currentParallaxY * 50 - 40, finalDamage, isCrit);
+
+                        // 5. 투사체 처리
                         if (p.type === 5) {
                             if (!p.hitMobiles) p.hitMobiles = [];
                             p.hitMobiles.push(c.id);
                         } else if (p.type !== 3 && p.type !== 6) {
-                            p.life = 0; 
+                            p.life = 0; // 일반 투사체 소멸
                         }
+                        
                         break; 
                     }
                 }
@@ -4764,9 +4901,15 @@
                 c.y = c.typeData.moveType === "float" ? c.y + (gY - 50 - c.y) * 0.05 * dtFactor + Math.sin(c.animTime)*0.5 : gY;
 
                 if (c.life <= 0) { critters.splice(i, 1); continue; }
+                // [수정] 몬스터 사망 처리 부분
                 if (c.hp <= 0) {
                      playSound(sfxStar);
-                     let drop = c.typeData.drop; consumableInv[drop] = (consumableInv[drop] || 0) + 1; saveGame();
+                     let drop = c.typeData.drop; 
+                     consumableInv[drop] = (consumableInv[drop] || 0) + 1; 
+                     
+                     // ★ [신규] 아이템 획득 알림 띄우기
+                     spawnItemLog(drop);
+
                      if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
                      critters.splice(i, 1); continue;
                 }
@@ -4801,6 +4944,8 @@
                 renderShootingStars(ctx);
             }
             renderLightning(ctx);
+
+            
 
             ctx.restore(); 
 
@@ -5026,7 +5171,7 @@
                     let itemKey = p.type;
                     consumableInv[itemKey] = (consumableInv[itemKey] || 0) + 1;
                     vfxParticles.spawnExplosion(p.screenX, p.screenY, consumableDB[itemKey]?.color || "#FFF", 20, 8); 
-                    activeSpawns.splice(i, 1); saveGame(); return; 
+                    activeSpawns.splice(i, 1); return; 
                 }
             }
 
@@ -5156,53 +5301,57 @@
             // ★ [티어별 고퀄리티 공격 생성] ★
             // ==========================================
 
-            // [티어 1] 💫 유성탄 (경쾌한 단발)
+            // [티어 1] 💫 유성탄
             if (chance < 1000) { 
+                playSound(COMBAT_SFX.attack_1); // 🎵 푝!
                 projectiles.push({ type: 1, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
             }
-            // [티어 2] ⚔️ 쌍검기 (나란히 날아가는 두 검기)
+            // [티어 2] ⚔️ 쌍검기
             else if (chance < 1000000) { 
+                playSound(COMBAT_SFX.attack_2); // 🎵 슉!
                 for (let i of [-1, 1]) {
-                    let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
-                    let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
-                    projectiles.push({ type: 2, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
+                    // ... (기존 쌍검 생성 코드) ...
+                     let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
+                     let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
+                     projectiles.push({ type: 2, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
                 }
             }
-            // [티어 3] ⚡ 하이퍼 레이저 (관통형 빔)
+            // [티어 3] ⚡ 하이퍼 레이저
             else if (chance < 100000000) { 
+                playSound(COMBAT_SFX.attack_3); // 🎵 지이잉!
                 projectiles.push({ type: 3, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
                 shakeIntensity = 15; applyScreenShake();
             }
-            // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 투척)
+            // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 5연발)
             else if (chance < 1000000000) { 
+                // 기존 for문이나 playSound 다 지우고 이걸로 교체!
                 for(let i=0; i<5; i++) {
                     setTimeout(() => {
+                        // ★ 등 뒤에 있던 검 5개가 하나씩 날아가는 사운드!
+                        let soundClone = COMBAT_SFX.attack_4.cloneNode();
+                        soundClone.volume = 0.6;
+                        soundClone.play().catch(()=>{});
+
                         let spread = (i - 2) * 0.12; 
                         let sAngle = angle + spread;
+                        // 투사체 발사
                         projectiles.push({ type: 4, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
-                    }, i * 60); 
+                    }, i * 60); // 0.06초 간격으로 다다다닥!
                 }
                 shakeIntensity = 20; applyScreenShake();
             }
-            // [티어 5] 🌀 아케인 차크람 (관통형 단발)
+            // [티어 5] 🌀 아케인 차크람
             else if (chance < 2400000000) { 
+                playSound(COMBAT_SFX.attack_5); // 🎵 촤라락!
                 projectiles.push({ 
-                    type: 5, 
-                    x: startX, 
-                    y: startY, 
-                    vx: spdX * 12, // 속도를 조금 더 시원하게 상향
-                    vy: spdY * 12, 
-                    angle, 
-                    life: 4.5, 
-                    color, 
-                    size: 140,
-                    rarity: chance,
-                    hitMobiles: [] // ★ [추가] 이 투사체에 맞은 몹들의 ID를 기록할 리스트
+                    type: 5, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
+                    angle, life: 4.5, color, size: 140, rarity: chance, hitMobiles: [] 
                 });
                 shakeIntensity = 35; applyScreenShake();
             }
-            // [티어 6] 🌌 차원 절단 (화면 끝까지 베기)
+            // [티어 6] 🌌 차원 절단
             else { 
+                playSound(COMBAT_SFX.attack_6); // 🎵 콰아앙!
                 projectiles.push({ type: 6, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
                 shakeIntensity = 70; applyScreenShake();
             }
@@ -5537,7 +5686,7 @@
                 let p = projectiles[i];
                 
                 // 레이저는 훨씬 더 짧게! (0.15초 내외로 사라짐)
-                p.life -= (p.type === 3 || p.type === 6) ? 0.12 : 0.025; 
+                p.life -= (p.type === 3 || p.type === 6) ? 0.01 : 0.025; 
                 
                 p.x += p.vx || 0; 
                 p.y += p.vy || 0;
@@ -5648,22 +5797,31 @@
                     ctx.fill();
                 }
 
-                // [티어 3] ⚡ 디바인 레이
-                else if (p.type === 3) {
-                    let len = p.length || 1500; let w = p.width || 90;
+                // [티어 3] ⚡ 하이퍼 레이저 (지지직거리는 연출 추가)
+                else if (p.type === 3) { 
+                    let len = p.length || 1500; 
                     
-                    if (!GRAPHICS.simpleAuras) {
-                        ctx.globalAlpha = finalAlpha * 0.15; ctx.fillStyle = color;
+                    // 수명에 따라 굵기가 진동함 (파지직 효과)
+                    let jitter = Math.random() * 10;
+                    let w = (p.width || 90) * p.life + jitter; 
+
+                    // 1. 외곽 글로우 (레이저 색)
+                    if (!GRAPHICS.simpleProjectiles) {
+                        ctx.globalAlpha = finalAlpha * 0.3; 
+                        ctx.fillStyle = color;
                         ctx.fillRect(0, -w/1.2, len, w * 1.6);
                     }
 
-                    ctx.globalAlpha = finalAlpha * 0.4; ctx.fillStyle = color;
+                    // 2. 메인 빔 (조금 더 진함)
+                    ctx.globalAlpha = finalAlpha * 0.6; 
+                    ctx.fillStyle = color;
                     ctx.fillRect(0, -w/2, len, w);
                     
-                    // 간소화 시 일렁이는 웨이브 효과 제거
-                    let wave = GRAPHICS.simpleAuras ? 0 : Math.sin(globalRenderTime * 0.5) * 5;
-                    ctx.globalAlpha = finalAlpha * 1.0; ctx.fillStyle = "#fff";
-                    ctx.fillRect(0, -(w/6 + wave/2), len, w/3 + wave);
+                    // 3. 코어 (흰색, 파지직거리며 얇아짐)
+                    let coreW = (w / 3) + Math.sin(globalRenderTime * 2) * 5;
+                    ctx.globalAlpha = finalAlpha * 1.0; 
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(0, -coreW/2, len, coreW);
                 }
 
                 // [티어 4] 🗡️ 발키리의 성검
@@ -5727,27 +5885,39 @@
                     ctx.restore();
                 }
 
-                // [티어 6] 🌌 차원 절단
-                else if (p.type === 6) {
-                    let len = p.length || 3000; let w = p.width || 550;
+                // [티어 6] 🌌 차원 절단 (공간을 찢고 검은 균열이 남는 연출)
+                else if (p.type === 6) { 
+                    let len = p.length || 3000; 
+                    // 수명이 줄어들수록 균열이 얇아짐
+                    let w = (p.width || 550) * Math.min(1, p.life * 1.5); 
                     
                     if (!GRAPHICS.simpleProjectiles) {
-                        ctx.globalCompositeOperation = 'difference'; // 색상 반전 (부하 큼)
-                        ctx.fillStyle = "#fff"; ctx.fillRect(0, -w/2, len, w);
+                        // 공간 왜곡 (반전 효과)
+                        ctx.globalCompositeOperation = 'difference'; 
+                        ctx.fillStyle = "#fff"; 
+                        ctx.fillRect(0, -w/2, len, w);
                         
+                        // 주변 전기 스파크
                         ctx.globalCompositeOperation = 'lighter';
-                        ctx.strokeStyle = color; ctx.lineWidth = 10;
-                        for(let k=0; k<5; k++) {
+                        ctx.strokeStyle = color; 
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        // 랜덤 스파크 3줄
+                        for(let k=0; k<3; k++) {
                             let yOff = (Math.random()-0.5) * w;
-                            ctx.beginPath(); ctx.moveTo(0, yOff); ctx.lineTo(len, yOff + (Math.random()-0.5)*200); ctx.stroke();
+                            ctx.moveTo(0, yOff);
+                            ctx.lineTo(len, yOff + (Math.random()-0.5)*100);
                         }
+                        ctx.stroke();
                     } else {
-                        // 간소화: 그냥 하얀 박스만 그림
                         ctx.globalCompositeOperation = 'source-over';
                         ctx.fillStyle = "#eee"; ctx.fillRect(0, -w/2, len, w);
                     }
                     
-                    ctx.fillStyle = "#000"; ctx.fillRect(0, -w/10, len, w/5);
+                    // 중심부 블랙홀 균열 (가장 늦게 사라짐)
+                    let coreW = w * 0.2 * Math.max(0, p.life);
+                    ctx.fillStyle = "#000"; 
+                    ctx.fillRect(0, -coreW/2, len, coreW);
                 }
 
                 ctx.restore(); // 투사체 그리기 끝
@@ -5876,67 +6046,69 @@
                         if (distSq < radiusSum * radiusSum) isHit = true;
                     }
 
-                    // 3. 적중 시 처리
+                    // [수정] 몬스터 피격 처리 (랜덤 데미지 + 메이플 스타일 숫자)
                     if (isHit) {
-                        // [사운드] 간소화 모드일 땐 빈도를 줄여 렉 방지
-                        if (globalRenderTime % 6 === 0 || !GRAPHICS.simpleProjectiles) {
-                             if(sfxSuccess.paused || sfxSuccess.ended) playSound(sfxSuccess); 
+                        // 1. 타격 이펙트 (간소화 모드 체크)
+                        if (!GRAPHICS.simpleProjectiles) {
+                            if(globalRenderTime % 5 === 0) playSound(sfxSuccess);
+                            vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", 5, 5);
                         }
-                        
-                        const baseDamage = (p.rarity || 1) / 2000;
-                        let finalDamage = baseDamage;
-                        if(p.type === 1) finalDamage = finalDamage * 0.3;
-                        if(p.type === 2) finalDamage = finalDamage * 0.2;
-                        if(p.type === 3) finalDamage = finalDamage * 0.35;
-                        if(p.type === 4) finalDamage = finalDamage * 0.25;
-                        if (p.type === 5) finalDamage = finalDamage * 0.5;
-                        if (p.type === 6) finalDamage = Math.max(999, baseDamage);
 
-                        c.hp -= finalDamage; 
-                        c.hitTime = 10; // 맞았을 때 깜빡이는 시간
+                        // 2. ★ 데미지 랜덤 계산 (핵심)
+                        let baseDamage = (p.rarity || 1) / 10;
                         
+                        // 타입별 보정
+                        if(p.type === 1) baseDamage *= 0.3;
+                        if(p.type === 2) baseDamage *= 0.2;
+                        if(p.type === 3) baseDamage *= 0.35;
+                        if(p.type === 4) baseDamage *= 0.25;
+                        if(p.type === 5) baseDamage *= 0.5;
+                        if(p.type === 6) baseDamage = Math.max(999, baseDamage);
+
+                        // ★ 랜덤 난수 (0.8 ~ 1.2배)
+                        let variance = 0.8 + Math.random() * 0.4; 
+                        let finalDamage = baseDamage * variance;
+                        
+                        // 크리티컬 판정 (1.1배 이상 터지면 크리!)
+                        let isCrit = variance > 1.1;
+
+                        if (globalRenderTime % 3 === 0) {
+                            if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
+                            else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
+                        }
+
+                        // 3. 체력 깎기
+                        c.hp -= finalDamage; 
+                        c.hitTime = 10; 
                         c.x += Math.cos(p.angle || 0) * 5; // 넉백
 
-                        // ★ [최적화 핵심] 공격 간소화 모드가 '꺼져있을 때만' 파티클 생성
-                        if (!GRAPHICS.simpleProjectiles) {
-                            let pCount = (p.type === 5) ? 3 : 8;
-                            vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", pCount, 5);
-                            
-                            // 차크람 관통 스파크
-                            if (p.type === 5) {
-                                vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#00E5FF", 3, 10);
-                            }
-                        }
-                        // (켜져있으면 파티클 생성 코드 자체를 실행하지 않음 -> 렉 제거)
+                        // 4. ★ 데미지 숫자 띄우기 (화면 좌표 기준)
+                        spawnDamageText(c.x - cameraX, c.y - currentParallaxY * 50 - 40, finalDamage, isCrit);
 
-                        // 4. 투사체 후처리 (관통 vs 소멸)
+                        // 5. 투사체 처리
                         if (p.type === 5) {
                             if (!p.hitMobiles) p.hitMobiles = [];
                             p.hitMobiles.push(c.id);
                         } else if (p.type !== 3 && p.type !== 6) {
-                            p.life = 0; // 일반 투사체는 소멸
+                            p.life = 0; // 일반 투사체 소멸
                         }
                         
-                        // 몬스터가 죽었거나 맞았으면 루프 종료 (중복 피격 방지)
-                        if (c.hp <= 0) break; 
                         break; 
                     }
                 } // 몬스터 루프 끝
             } // 투사체 루프 끝
 
-                // 사망 처리 부분 찾아서 교체
+                // [수정] 몬스터 사망 처리 부분
                 if (c.hp <= 0) {
-                    playSound(sfxStar);
-                    let drop = c.typeData.drop; 
-                    consumableInv[drop] = (consumableInv[drop] || 0) + 1; 
-                    saveGame();
+                     playSound(sfxStar);
+                     let drop = c.typeData.drop; 
+                     consumableInv[drop] = (consumableInv[drop] || 0) + 1; 
+                     
+                     // ★ [신규] 아이템 획득 알림 띄우기
+                     spawnItemLog(drop);
 
-                    // ★ [수정] 파티클 숫자를 기존 30개에서 15개로 반토막 냅니다. 
-                    // (simpleProjectiles가 켜져 있으면 위 함수에서 여기서 또 1/5로 줄어듭니다)
-                    vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
-                    
-                    critters.splice(i, 1); 
-                    continue; 
+                     if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
+                     critters.splice(i, 1); continue;
                 }
                 // [수정] 몹 UI 렌더링 (이름표 + HP바) - 높이 자동 조절 적용
                 if (c.x > cameraX - 50 && c.x < cameraX + W + 50) {
@@ -5980,6 +6152,48 @@
             renderLightning(ctx);
             renderSpawns(ctx);
             vfxParticles.updateAndDraw(ctx); 
+
+            // ★ [신규] 데미지 텍스트 렌더링 (메이플 스타일)
+            for (let i = damageLabels.length - 1; i >= 0; i--) {
+                let d = damageLabels[i];
+                d.life -= 0.02 * dtFactor; // 서서히 사라짐
+                d.y += d.vy * dtFactor;    // 위로 둥실 떠오름
+                d.vy += 0.1 * dtFactor;    // 중력 적용 (살짝 느려짐)
+
+                if (d.life <= 0) { damageLabels.splice(i, 1); continue; }
+
+                ctx.save();
+                ctx.translate(d.x, d.y);
+                
+                // 크리티컬이면 팝업 효과 (커졌다 작아짐)
+                let scale = d.scale;
+                if (d.isCrit && d.life > 0.8) scale *= 1.2; 
+                ctx.scale(scale, scale);
+
+                ctx.globalAlpha = Math.min(1, d.life * 2); // 끝에 가서 투명해짐
+                
+                // 폰트 설정 (메이플 느낌 나는 굵은 폰트)
+                ctx.font = "900 24px 'Rajdhani', sans-serif";
+                ctx.textAlign = "center";
+                
+                // 외곽선 (가독성 UP)
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = "black";
+                ctx.strokeText(d.text, 0, 0);
+
+                // 글자 색상 (크리티컬: 주황~빨강 / 일반: 노랑~흰색)
+                ctx.fillStyle = d.isCrit ? "#FF5252" : "#FFF176"; 
+                ctx.fillText(d.text, 0, 0);
+                
+                // (선택사항) 'CRITICAL!' 텍스트 추가
+                if (d.isCrit) {
+                    ctx.font = "bold 12px sans-serif";
+                    ctx.fillStyle = "#FFD700";
+                    ctx.fillText("CRITICAL!", 0, -20);
+                }
+
+                ctx.restore();
+            }
 
             let fogAlpha = currentWeather.id === "foggy" ? Math.min(0.5, currentFog) : (currentFog * 0.3);
             DOM.fogOverlay.style.background = `rgba(${fogRgb[0]}, ${fogRgb[1]}, ${fogRgb[2]}, ${fogAlpha})`; 
@@ -6179,7 +6393,6 @@
                     console.log(`🎒 [자동저장] ${currentResult.name}`);
                 }
 
-                saveGame();
                 isRolling = false; 
                 autoRollTimer = setTimeout(() => {
                     if(isAutoRolling) document.getElementById("roll-btn").click();
@@ -6212,8 +6425,7 @@
         document.getElementById("btn-keep").addEventListener("click", () => { 
             if (!currentResult) return;
             playSound(sfxSuccess); 
-            inventory.push(currentResult); 
-            saveGame(); 
+            inventory.push(currentResult);  
             resetRollState(); 
         });
 
@@ -6224,7 +6436,6 @@
             if (!currentResult) return;
             playSound(sfxClick); 
             fragments += Math.max(1, Math.ceil(currentResult.chanceX / 10)); 
-            saveGame(); 
             resetRollState(); 
         });
 
@@ -6436,7 +6647,15 @@
 
             // ★ [수정 3] 여기에 추가하세요! (강제 리사이즈 실행)
             window.dispatchEvent(new Event('resize'));
+
+            // ★ [신규] 3초마다 자동 저장 (렉 없이 부드럽게 저장)
+            setInterval(() => { saveGame(); }, 180000); // 3분마다 자동 저장
         };
+
+        // 탭 닫거나 새로고침 할 때 강제 저장 (데이터 증발 방지)
+        window.addEventListener("beforeunload", () => {
+            saveGame();
+        });
 
     </script>
 </body>
