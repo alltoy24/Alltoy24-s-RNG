@@ -617,6 +617,26 @@
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
+    <div id="start-screen" style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: #000; z-index: 999999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: white; font-family: 'Rajdhani', sans-serif;
+    ">
+        <h1 style="font-family: 'Cinzel', serif; font-size: 2.5rem; text-shadow: 0 0 20px #FF416C; margin-bottom: 20px;">
+            RNG SIMULATOR
+        </h1>
+        <p style="color: #aaa; margin-bottom: 40px;">Touch screen to start</p>
+        <button id="start-btn" style="
+            padding: 15px 50px; font-size: 1.2rem; font-weight: bold;
+            background: linear-gradient(45deg, #FF416C, #FF4B2B);
+            border: none; border-radius: 30px; color: white;
+            box-shadow: 0 0 30px rgba(255, 65, 108, 0.5);
+            animation: pulse 1.5s infinite;
+        ">
+            GAME START
+        </button>
+    </div>
     <div id="rotate-warning">
         <h1>⚠️ SCREEN ROTATION REQUIRED</h1>
         <p>이 게임은 가로 모드(Landscape)에 최적화되어 있습니다.<br>기기를 회전시켜 주세요.</p>
@@ -3893,20 +3913,23 @@
             });
         }
 
-        // 💡 [수정] 아래쪽 롤 바 토글 함수
+        // [수정] 아래쪽 롤 바 토글 함수 (버그 수정)
         function toggleRollBottom() {
             playSound(sfxClick);
             const bar = document.getElementById("roll-bottom-bar");
             const btn = document.getElementById("roll-bottom-toggle");
             
+            // ★ 혹시 자바스크립트로 강제 고정된 위치가 있다면 초기화
+            bar.style.bottom = "";
+            btn.style.bottom = "";
+
             bar.classList.toggle("open");
             btn.classList.toggle("open");
             
-            // 열려있을 땐 ▼ CLOSE, 닫혀있을 땐 ▲ ROLL
             btn.innerText = bar.classList.contains("open") ? "▼ CLOSE" : "▲ ROLL";
         }
 
-        // [최종 수정] UI 가시성 조절 (강제 복구 기능 강화)
+        // [최종 수정] UI 가시성 조절 (위치 강제 고정 버그 해결)
         function setUIVisibility(visible) {
             const uiElements = [
                 'top-ui', 'quick-item-toggle', 'quick-item-bar', 'combo-display', 'buff-display', 
@@ -3916,22 +3939,19 @@
             uiElements.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    if (id === 'mobile-controls' && !IS_MOBILE) return; // PC에선 모바일 키 숨김
+                    if (id === 'mobile-controls' && !IS_MOBILE) return; 
 
                     if (visible) {
                         el.classList.remove('ui-hidden');
                         
-                        // ★ 강제 복구 명령 3종 세트
+                        // 기본 가시성 복구
                         el.style.visibility = "visible"; 
                         el.style.opacity = "1"; 
                         el.style.pointerEvents = "auto"; 
                         
-                        // 하단 바 위치 리셋 (열려있던 상태면 유지)
-                        if (id === 'roll-bottom-bar') {
-                            el.style.bottom = el.classList.contains('open') ? "0" : "";
-                        }
-                        if (id === 'roll-bottom-toggle') {
-                            // 모바일/PC에 따라 버튼 위치가 다르므로 클래스에 맡기고 인라인 스타일 제거
+                        // ★ [핵심 수정] 위치를 강제로 0으로 잡지 말고, CSS 클래스에 맡기도록 초기화!
+                        // 이렇게 해야 토글 버튼 눌렀을 때 CSS transition이 먹힙니다.
+                        if (id === 'roll-bottom-bar' || id === 'roll-bottom-toggle') {
                             el.style.bottom = ""; 
                         }
 
@@ -6604,11 +6624,11 @@
         };
 
         window.onload = () => { 
-            // 1. 모바일이면 강제로 '감자 모드(최저사양)' 적용
+            // 1. 모바일 환경 설정
             if (IS_MOBILE) {
-                console.log("📱 모바일 환경 감지: 최적화 & 컨트롤러 활성화");
+                console.log("📱 모바일 환경: 전체화면 및 컨트롤러 준비");
                 
-                // 그래픽 설정 강제 하향 (렉 방지)
+                // 그래픽 하향 (렉 방지)
                 GRAPHICS.weatherDensity = 0.2;      
                 GRAPHICS.showGrass = false;        
                 GRAPHICS.showClouds = false;       
@@ -6616,30 +6636,25 @@
                 GRAPHICS.showFireflies = false;    
                 GRAPHICS.fancyGraphics = false;    
                 
+                // 간소화 모드 ON
                 GRAPHICS.simpleProjectiles = true; 
                 GRAPHICS.simpleAuras = true;       
                 GRAPHICS.simpleMobs = true;        
                 
-                // 해상도 고정
-                canvas.width = W; canvas.height = H;
-                vfxCanvas.width = W; vfxCanvas.height = H;
-
-                // ★ 모바일 컨트롤러 UI 켜기
+                // 모바일 컨트롤러 표시
                 const mControls = document.getElementById("mobile-controls");
                 if (mControls) {
-                    mControls.style.display = "flex"; // CSS의 none을 덮어씀
+                    mControls.style.display = "flex"; 
                     mControls.classList.remove("ui-hidden");
                 }
 
-                // 모바일 터치 이벤트 연결
+                // 모바일 조작 연결
                 const btnLeft = document.getElementById("btn-left");
                 const btnRight = document.getElementById("btn-right");
-
                 const handleMove = (dir, isPressed) => {
                     if (dir === 'left') keys.left = isPressed;
                     if (dir === 'right') keys.right = isPressed;
                 };
-
                 if(btnLeft) {
                     btnLeft.addEventListener("touchstart", (e) => { e.preventDefault(); handleMove('left', true); });
                     btnLeft.addEventListener("touchend", (e) => { e.preventDefault(); handleMove('left', false); });
@@ -6650,9 +6665,10 @@
                 }
             }
 
+            // 2. 게임 데이터 로드
             loadGame(); 
 
-            // 날씨 및 오디오 초기화
+            // 3. 초기 날씨 설정
             currentWeather = weathers.find(w => w.id === "clear");
             document.getElementById("weather-display").innerText = currentWeather.name;
             bgmPlayer.src = currentWeather.music;
@@ -6660,25 +6676,54 @@
             targetFog = 0; targetSnow = 0; targetParticleCount = 0;
             calcBuffs();
 
-            // 첫 클릭 시 오디오 재생 허용
-            document.body.addEventListener('click', () => { 
+            // 4. ★ [핵심] 화면 강제 리사이즈 함수 (주소창 대응)
+            function forceResize() {
+                // 브라우저 내부 실제 높이 가져오기
+                W = window.innerWidth;
+                H = window.innerHeight;
+                canvas.width = W; canvas.height = H;
+                vfxCanvas.width = W; vfxCanvas.height = H;
+                
+                // 배경 재생성 (비율 안 깨지게)
+                if(typeof generateNature === 'function') generateNature();
+                
+                // 스크롤 강제로 맨 위로 (주소창 숨기기 시도)
+                window.scrollTo(0, 0);
+            }
+
+            // 리사이즈 이벤트 연결
+            window.addEventListener('resize', forceResize);
+            window.addEventListener('orientationchange', () => { setTimeout(forceResize, 200); });
+            forceResize(); // 즉시 실행
+
+            // 5. ★ [핵심] 스타트 버튼 클릭 시 -> 진짜 전체화면(Fullscreen) 진입
+            const startScreen = document.getElementById("start-screen");
+            const startBtn = document.getElementById("start-btn");
+
+            startBtn.addEventListener("click", () => {
+                // (1) 오디오 컨텍스트 활성화 (모바일 소리 안 나는 문제 해결)
                 if (bgmPlayer.paused) { 
                     bgmPlayer.play().catch(e=>{});
                     weatherSfxPlayer.play().catch(e=>{});
-                } 
-            }, { once: true });
+                }
+                
+                // (2) 전체화면 요청 (브라우저 주소창 제거)
+                const docEl = document.documentElement;
+                if (docEl.requestFullscreen) docEl.requestFullscreen();
+                else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen(); // iOS/Safari
+                else if (docEl.msRequestFullscreen) docEl.webkitRequestFullscreen();
 
-            // ★ [수정 3] 여기에 추가하세요! (강제 리사이즈 실행)
-            window.dispatchEvent(new Event('resize'));
+                // (3) 오프닝 화면 제거
+                startScreen.style.opacity = 0;
+                setTimeout(() => { startScreen.style.display = "none"; }, 500);
+                
+                // (4) 리사이즈 한번 더 강제
+                setTimeout(forceResize, 100);
+            });
 
-            // ★ [신규] 3초마다 자동 저장 (렉 없이 부드럽게 저장)
-            setInterval(() => { saveGame(); }, 180000); // 3분마다 자동 저장
+            // 6. 자동 저장 (3분 -> 3초로 다시 변경 권장. 3분은 너무 깁니다)
+            setInterval(() => { saveGame(); }, 3000); 
         };
-
-        // 탭 닫거나 새로고침 할 때 강제 저장 (데이터 증발 방지)
-        window.addEventListener("beforeunload", () => {
-            saveGame();
-        });
 
     </script>
 </body>
