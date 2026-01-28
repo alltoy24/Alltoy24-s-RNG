@@ -2477,8 +2477,6 @@
                 equippedAuraName = name; 
             }
             
-            // ★ 핵심: 데이터 저장 후 화면 다시 그리기
-            saveGame(); 
             renderInventory(); // 인벤토리 버튼 상태 갱신
             // 플레이어 모습도 갱신하려면 필요하지만 render() 루프가 돌고 있어서 생략 가능
         };
@@ -2563,8 +2561,7 @@
                 equippedAuraName = null;
             }
 
-            // ★ 핵심: 저장 및 UI 갱신
-            saveGame(); 
+            // ★ 핵심: UI 갱신
             updateAllUI(); // 전체 UI 갱신 (fragments 수치도 바뀌어야 하므로)
         };
 
@@ -2673,24 +2670,68 @@
 
         function countAura(name) { return inventory.filter(a => a.name === name).length; }
         function renderAlchemyList() { const list = document.getElementById("alchemy-list"); list.innerHTML = ""; potionRecipes.forEach(recipe => { let resultItem = consumableDB[recipe.result]; if(!resultItem) return; let hasAll = true; let reqHtml = ""; for (const [rId, rCount] of Object.entries(recipe.reqItems)) { let have = consumableInv[rId] || 0; if (have < rCount) hasAll = false; let itemInfo = consumableDB[rId]; if(itemInfo) reqHtml += `<span class='req-tag' style="color:${have >= rCount ? '#81C784' : '#E53935'}">${itemInfo.name} (${have}/${rCount})</span>`; } for (const [rName, rCount] of Object.entries(recipe.reqAuras)) { let have = countAura(rName); if (have < rCount) hasAll = false; reqHtml += `<span class='req-tag' style="color:${have >= rCount ? '#81C784' : '#E53935'}">${rName} (${have}/${rCount})</span>`; } list.innerHTML += `<div class="item-card"><div><div class="item-name" style="color:${resultItem.color}">${resultItem.name}</div><div class="item-desc">${resultItem.desc}</div><div class="req-auras">${reqHtml}</div></div><button class="action-sm-btn btn-alchemy ${!hasAll ? 'disabled-btn' : ''}" onclick="craftPotion('${recipe.result}')" ${!hasAll ? 'disabled' : ''} style="pointer-events:auto;">연성하기</button></div>`; }); }
-        window.craftPotion = function(resultId) { let recipe = potionRecipes.find(r => r.result === resultId); for (const [rId, rCount] of Object.entries(recipe.reqItems)) consumableInv[rId] -= rCount; for (const [rName, rCount] of Object.entries(recipe.reqAuras)) { for (let i = 0; i < rCount; i++) inventory.splice(inventory.findIndex(item => item.name === rName), 1); } consumableInv[resultId] = (consumableInv[resultId] || 0) + 1; playSound(sfxSuccess); saveGame(); };
+        // [수정] 물약 연성 함수 (렉 제거 + 즉시 갱신)
+        window.craftPotion = function(resultId) { 
+            let recipe = potionRecipes.find(r => r.result === resultId);
+            if (!recipe) return;
+
+            // 1. 재료 차감 (아이템)
+            for (const [rId, rCount] of Object.entries(recipe.reqItems)) {
+                consumableInv[rId] -= rCount;
+            }
+            // 2. 재료 차감 (오라)
+            for (const [rName, rCount] of Object.entries(recipe.reqAuras)) { 
+                for (let i = 0; i < rCount; i++) {
+                    let idx = inventory.findIndex(item => item.name === rName);
+                    if (idx > -1) inventory.splice(idx, 1);
+                }
+            } 
+            
+            // 3. 결과물 지급
+            consumableInv[resultId] = (consumableInv[resultId] || 0) + 1; 
+            playSound(sfxSuccess); 
+            
+            // ★ 핵심: saveGame()을 지우고 UI 갱신 함수를 직접 호출!
+            // saveGame(); <--- 삭제 (렉 유발)
+            
+            updateAllUI(); // 재료가 줄고 결과가 늘어난 것을 화면에 반영
+        };
 
         function renderCrafting() { const list = document.getElementById("craft-list"); list.innerHTML = ""; gearDB.forEach(gear => { let reqHtml = ""; let canCraft = true; Object.entries(gear.reqAuras).forEach(([rName, rCount]) => { let has = countAura(rName); if(has < rCount) canCraft = false; reqHtml += `<span class="req-tag" style="color:${has>=rCount ? '#81C784' : '#E57373'}">${rName} ${has}/${rCount}</span>`; }); if(fragments < gear.cost || ownedGears.includes(gear.id)) canCraft = false; list.innerHTML += `<div class="item-card"><div><div class="item-name" style="color:${gear.color}">${gear.name}</div><div class="item-desc">${gear.desc}</div><div class="req-auras">${reqHtml}</div><div class="item-cost">비용: ${gear.cost}✨</div></div><button class="action-sm-btn btn-craft ${!canCraft ? 'disabled-btn' : ''}" onclick="craftGear(${gear.id})" ${!canCraft ? 'disabled' : ''} style="pointer-events:auto;">${ownedGears.includes(gear.id) ? "보유중" : "제작"}</button></div>`; }); }
-        window.craftGear = function(id) { let gear = gearDB.find(g => g.id === id); Object.entries(gear.reqAuras).forEach(([rName, rCount]) => { for(let i=0; i<rCount; i++) inventory.splice(inventory.findIndex(a=>a.name===rName), 1); }); fragments -= gear.cost; ownedGears.push(id); playSound(sfxSuccess); saveGame(); };
+        // [수정] 장비 제작 함수 (렉 제거 + 즉시 갱신)
+        window.craftGear = function(id) { 
+            let gear = gearDB.find(g => g.id === id); 
+            if (!gear) return;
 
+            // 1. 재료 차감 (오라)
+            Object.entries(gear.reqAuras).forEach(([rName, rCount]) => { 
+                for(let i=0; i<rCount; i++) {
+                    let idx = inventory.findIndex(a => a.name === rName);
+                    if (idx > -1) inventory.splice(idx, 1);
+                }
+            }); 
+            
+            // 2. 재료 차감 (조각) 및 장비 지급
+            fragments -= gear.cost; 
+            ownedGears.push(id); 
+            playSound(sfxSuccess); 
+            
+            // ★ 핵심: saveGame()을 지우고 UI 갱신 함수를 직접 호출!
+            // saveGame(); <--- 삭제 (렉 유발)
+
+            updateAllUI(); // 조각 줄어듦 + 버튼 '보유중'으로 변경 반영
+        };
         function updateSkipThreshold(val, isInit = false) {
             const thresholds = [0, 1000, 10000, 100000, 1000000, 10000000];
             const labels = ["OFF", "1,000 미만 스킵", "10,000 미만 스킵", "100,000 미만 스킵", "1,000,000 미만 스킵", "10,000,000 미만 스킵"];
             
             skipThreshold = thresholds[val];
             document.getElementById("skip-label").innerText = `연출 스킵: ${labels[val]}`;
-            
-            if (!isInit) saveGame(); // 설정값 저장
         }
 
         function renderEquipment() { for (let i = 0; i < 3; i++) { let slot = document.getElementById(`slot-${i}`); let gearId = equippedGears[i]; if (gearId !== null) { let gear = gearDB.find(g => g.id === gearId); if(gear) { slot.className = "equip-slot filled"; slot.style.borderColor = gear.color; slot.innerHTML = `<span style="color:${gear.color}; text-shadow:0 0 10px ${gear.color}">★</span><div class="slot-name">${gear.name}</div>`; } } else { slot.className = "equip-slot"; slot.style.borderColor = ""; slot.innerHTML = "+"; } } const list = document.getElementById("gear-list"); list.innerHTML = ""; ownedGears.forEach(id => { let gear = gearDB.find(g => g.id === id); if(!gear) return; let isEq = equippedGears.includes(id); list.innerHTML += `<div class="item-card"><div class="item-name" style="color:${gear.color}">${gear.name}</div><div class="item-desc">${gear.desc}</div><button class="action-sm-btn ${isEq ? 'btn-unequip' : 'btn-equip'}" onclick="toggleEquip(${id})" style="pointer-events:auto;">${isEq ? "해제" : "장착"}</button></div>`; }); }
-        window.toggleEquip = function(id) { playSound(sfxEquip); let idx = equippedGears.indexOf(id); if(idx > -1) equippedGears[idx] = null; else { let empty = equippedGears.indexOf(null); if(empty > -1) equippedGears[empty] = id; else alert("장착 슬롯이 꽉 찼습니다."); } saveGame(); };
-        window.unequipGear = function(idx) { if(equippedGears[idx] !== null) { equippedGears[idx] = null; playSound(sfxClick); calcBuffs(); renderEquipment(); saveGame(); } };
+        window.toggleEquip = function(id) { playSound(sfxEquip); let idx = equippedGears.indexOf(id); if(idx > -1) equippedGears[idx] = null; else { let empty = equippedGears.indexOf(null); if(empty > -1) equippedGears[empty] = id; else alert("장착 슬롯이 꽉 찼습니다."); } };
+        window.unequipGear = function(idx) { if(equippedGears[idx] !== null) { equippedGears[idx] = null; playSound(sfxClick); calcBuffs(); renderEquipment(); } };
 
         class ParticleSystem {
             constructor() {
@@ -4863,10 +4904,8 @@
                         // 크리티컬 판정 (1.1배 이상 터지면 크리!)
                         let isCrit = variance > 1.1;
 
-                        if (globalRenderTime % 3 === 0) {
-                            if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
-                            else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
-                        }
+                        if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
+                        else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
 
                         // 3. 체력 깎기
                         c.hp -= finalDamage; 
@@ -5009,16 +5048,18 @@
             }
 
             networkTimer += dt;
-            if (networkTimer > 0.05) { 
-                if (Math.abs(player.vx) > 0.01 || keys.left || keys.right) {
+            if (networkTimer > 0.2) { 
+                // 움직이거나 키를 눌렀을 때만 전송
+                if (Math.abs(player.vx) > 0.1 || keys.left || keys.right) {
                     socket.emit('playerMove', { 
-                        x: player.x, y: player.y, vx: player.vx, 
+                        x: player.x, y: player.y, 
+                        vx: player.vx, 
                         facingRight: player.facingRight, 
-                        aura: equippedAuraName || "COMMON", nickname: myNickname 
+                        aura: equippedAuraName || "COMMON", 
+                        nickname: myNickname 
                     });
                 }
                 networkTimer = 0;
-                calcBuffs(); 
             }
 
             requestAnimationFrame(render); 
@@ -6115,10 +6156,8 @@
                         // 크리티컬 판정 (1.1배 이상 터지면 크리!)
                         let isCrit = variance > 1.1;
 
-                        if (globalRenderTime % 3 === 0) {
-                            if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
-                            else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
-                        }
+                        if (isCrit) playSound(COMBAT_SFX.hit_crit);   // 💥 크리티컬 사운드
+                        else playSound(COMBAT_SFX.hit_normal);        // 퍽 일반 사운드
 
                         // 3. 체력 깎기
                         c.hp -= finalDamage; 
@@ -6365,8 +6404,6 @@
 
             document.getElementById("auto-scrap-label").innerText = `자동 분해: ${scrapIdx == 0 ? "OFF" : labels[scrapIdx] + " 미만 분해"}`;
             document.getElementById("auto-stop-label").innerText = `자동 정지: ${stopIdx == 0 ? "OFF" : labels[stopIdx] + " 이상 정지"}`;
-            
-            saveGame(); // 값 저장
         };
 
         function getRollResult() {
@@ -6722,9 +6759,26 @@
             });
 
             // 6. 자동 저장 (3분 -> 3초로 다시 변경 권장. 3분은 너무 깁니다)
-            setInterval(() => { saveGame(); }, 3000); 
+            setInterval(() => { saveGame(); }, 180000); 
         };
 
+        // ==========================================
+        // ★ [필수] 데이터 증발 방지 안전장치
+        // ==========================================
+
+        // 1. PC: 창을 닫거나 새로고침(F5) 할 때
+        window.addEventListener("beforeunload", () => {
+            saveGame();
+        });
+
+        // 2. 모바일: 홈 화면으로 나가거나 다른 앱으로 전환할 때 (가장 중요!)
+        // 모바일 브라우저는 beforeunload가 안 먹힐 때가 많아서 이게 필수입니다.
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === 'hidden') {
+                saveGame();
+                console.log("💾 App Hidden: Force Saved");
+            }
+        });
     </script>
 </body>
 </html>
