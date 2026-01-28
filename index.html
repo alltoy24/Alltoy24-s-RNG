@@ -3891,7 +3891,7 @@
             btn.innerText = bar.classList.contains("open") ? "▼ CLOSE" : "▲ ROLL";
         }
 
-        // 💡 [수정] UI 가시성 조절 함수 (UI 증발 및 먹통 방지)
+        // [최종 수정] UI 가시성 조절 (강제 복구 기능 강화)
         function setUIVisibility(visible) {
             const uiElements = [
                 'top-ui', 'quick-item-toggle', 'quick-item-bar', 'combo-display', 'buff-display', 
@@ -3901,17 +3901,25 @@
             uiElements.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    // 모바일 컨트롤러는 데스크탑에서 굳이 켤 필요 없음
-                    if (id === 'mobile-controls' && !IS_MOBILE) return;
+                    if (id === 'mobile-controls' && !IS_MOBILE) return; // PC에선 모바일 키 숨김
 
                     if (visible) {
                         el.classList.remove('ui-hidden');
-                        el.style.visibility = "visible"; 
-                        el.style.opacity = "1"; // ★ 강제로 불투명하게 만듦 (핵심)
-                        el.style.pointerEvents = "auto"; // ★ 터치 가능하게 복구
                         
-                        // 하단 바 위치 리셋 (CSS 클래스에 맡김)
-                        if (id === 'roll-bottom-bar') el.style.bottom = ""; 
+                        // ★ 강제 복구 명령 3종 세트
+                        el.style.visibility = "visible"; 
+                        el.style.opacity = "1"; 
+                        el.style.pointerEvents = "auto"; 
+                        
+                        // 하단 바 위치 리셋 (열려있던 상태면 유지)
+                        if (id === 'roll-bottom-bar') {
+                            el.style.bottom = el.classList.contains('open') ? "0" : "";
+                        }
+                        if (id === 'roll-bottom-toggle') {
+                            // 모바일/PC에 따라 버튼 위치가 다르므로 클래스에 맡기고 인라인 스타일 제거
+                            el.style.bottom = ""; 
+                        }
+
                     } else {
                         el.classList.add('ui-hidden');
                     }
@@ -6561,7 +6569,7 @@
                         setTimeout(() => { 
                             shakeIntensity = 20; applyScreenShake(); 
                             vfxParticles.spawnExplosion(W/2, H/2-100, currentResult.color, 50, 15); 
-                            restoreBGMWithImpact(); playSound(sfxSuccess); aa
+                            restoreBGMWithImpact(); playSound(sfxSuccess);
                             document.getElementById("stage").style.opacity = 1; 
                             showFinalResult(); 
                         }, 1500); 
