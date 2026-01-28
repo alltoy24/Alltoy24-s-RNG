@@ -2446,14 +2446,21 @@
 
         window.toggleModal = function(id, show) { playSound(sfxClick); const modal = document.getElementById(id); if (show) { modal.style.zIndex = 9999; modal.classList.add('active'); } else modal.classList.remove('active'); };
 
-        // 💡 [신규] 오라 장착/해제 토글 함수 (script 내부에 추가)
+        // [수정] 오라 장착/해제 (UI 즉시 갱신)
         window.toggleEquipAura = function(name) {
             playSound(sfxEquip);
+            
+            // 토글 로직
             if (equippedAuraName === name) {
-                equippedAuraName = null; // 이미 장착 중이면 해제
+                equippedAuraName = null; 
             } else {
-                equippedAuraName = name; // 아니면 장착
+                equippedAuraName = name; 
             }
+            
+            // ★ 핵심: 데이터 저장 후 화면 다시 그리기
+            saveGame(); 
+            renderInventory(); // 인벤토리 버튼 상태 갱신
+            // 플레이어 모습도 갱신하려면 필요하지만 render() 루프가 돌고 있어서 생략 가능
         };
 
         // 💡 [수정] renderInventory() 함수 내부의 list.innerHTML += `...` 부분 수정
@@ -2506,6 +2513,7 @@
                 </div>`; 
             }); 
         }
+        // [수정] 오라 분해 (UI 즉시 갱신)
         window.scrapAura = function(name, amount) { 
             playSound(sfxClick); 
             amount = parseInt(amount);
@@ -2513,11 +2521,16 @@
             let auraData = allAuras.find(a => a.name === name);
             if (!auraData) return;
 
-            // 1. 조각 획득 계산
+            // 1. 보유량 확인 (예외 처리)
+            let currentCount = countAura(name);
+            if (amount > currentCount) amount = currentCount;
+            if (amount <= 0) return;
+
+            // 2. 조각 획득
             let fragPerItem = Math.max(1, Math.ceil(auraData.chanceX / 10));
             fragments += (fragPerItem * amount); 
 
-            // 2. 인벤토리에서 선택한 수량만큼 삭제
+            // 3. 인벤토리에서 삭제
             for (let i = inventory.length - 1; i >= 0 && amount > 0; i--) {
                 if (inventory[i].name === name) {
                     inventory.splice(i, 1);
@@ -2525,12 +2538,14 @@
                 }
             }
 
-            // ★★★ [버그 수정 핵심] ★★★
-            // 현재 장착 중인 오라 이름과 분해한 오라 이름이 같고,
-            // 인벤토리에 해당 오라가 0개 남았다면 장착을 해제함.
+            // 4. 장착 중인 오라가 다 사라졌으면 장착 해제
             if (equippedAuraName === name && countAura(name) === 0) {
                 equippedAuraName = null;
             }
+
+            // ★ 핵심: 저장 및 UI 갱신
+            saveGame(); 
+            updateAllUI(); // 전체 UI 갱신 (fragments 수치도 바뀌어야 하므로)
         };
 
         function renderConsumableList() { const list = document.getElementById("consumable-list"); list.innerHTML = ""; Object.entries(consumableInv).forEach(([key, count]) => { if(count <= 0) return; let item = consumableDB[key]; if(!item) return; list.innerHTML += `<div class="item-card"><div><div class="item-name" style="color:${item.color}">${item.name} <span style="float:right;">x${count}</span></div><div class="item-desc">${item.desc}</div></div><button class="action-sm-btn btn-alchemy" onclick="useConsumable('${key}')" style="pointer-events:auto;">사용하기</button></div>`; }); }
