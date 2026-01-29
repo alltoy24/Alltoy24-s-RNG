@@ -97,13 +97,13 @@ const player = {
     vx: 0, 
     vy: 0,              // 수직 속도 (추가)
     gravity: 0.8,       // 중력의 세기 (추가)
-    jumpPower: -15,     // 점프 힘 (음수일수록 높게 점프, 추가)
+    jumpPower: -13,     // 점프 힘 (음수일수록 높게 점프, 추가)
     isGrounded: true,   // 땅에 닿아있는지 확인 (추가)
     isDashing: false,
     dashTimer: 0,        // 대쉬 지속 시간 (프레임 단위)
     dashCooldown: 0,     // 다음 대쉬까지 남은 시간
     dashSpeed: 35,       // 대쉬 순간 속도
-    dashDuration: 12,    // 대쉬가 유지될 프레임 (약 0.2초)
+    dashDuration: 4,    // 대쉬가 유지될 프레임 (약 0.2초)
     dashCooldownMax: 60,  // 대쉬 재사용 대기시간 (약 1초)
     dashGhosts: [], // ★ 잔상 위치를 저장할 배열
     
@@ -3019,44 +3019,6 @@ function render() {
 
         // [수정] 몬스터 사망 처리 (비선형 경험치 적용 + XP 텍스트 최적화)
         if (c.hp <= 0) {
-                playSound('star');
-                let drop = c.typeData.drop;
-                consumableInv[drop] = (consumableInv[drop] || 0) + 1;
-                
-                spawnItemLog(drop);
-
-                // ======================================================
-                // ★ [핵심 변경] 비선형 경험치 공식 (Quadratic Scaling)
-                // ======================================================
-                // 1. 기본 경험치: 체력의 10%
-                let baseXP = c.maxHp / 10;
-                
-                // 2. 보너스 배율: 체력이 5,000 늘어날 때마다 경험치 배율이 1.0배씩 추가됨
-                // (약한 몹은 1.2배, 강한 몹은 5배~20배 뻥튀기)
-                let bonusMultiplier = 1 + (c.maxHp / 5000); 
-
-                // 3. 최종 계산 (소수점 버림)
-                let xpGain = Math.floor(baseXP * bonusMultiplier);
-
-                // 최소값 보장 (10 XP)
-                xpGain = Math.max(10, xpGain);
-                
-                addExp(xpGain);
-                // ======================================================
-
-                // XP 텍스트 띄우기 (위치: 데미지보다 훨씬 위쪽)
-                let randomX = (Math.random() - 0.5) * 60; 
-                
-                damageLabels.push({
-                x: c.x - cameraX + randomX, 
-                y: c.y - currentParallaxY * 50 - 140, // 데미지보다 더 위(-140)
-                text: `+${xpGain.toLocaleString()} XP`, // 콤마(,) 추가
-                life: 2.5, // 더 오래 떠있음
-                vy: -0.5,  // 천천히 우아하게 올라감
-                scale: 1.3, // 글자 더 큼
-                isCrit: false, 
-                customColor: "#00E5FF" // 형광 파랑
-                });
 
                 if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
                 critters.splice(i, 1); continue;
