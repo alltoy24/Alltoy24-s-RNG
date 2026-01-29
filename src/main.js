@@ -2,7 +2,7 @@ import { allAuras } from './data/auras.js';
 import { gearDB, consumableDB, potionRecipes } from './data/items.js';
 import { CRITTER_DB } from './data/mobs.js';
 import { lerp, hexToRgb, distToSegment, drawStar } from './utils.js';
-import { drawPlayer, drawOtherPlayer } from './graphics/playerRenderer.js';
+import { drawPlayer, drawOtherPlayer, drawGhost } from './graphics/playerRenderer.js';
 import { GRAPHICS } from './settings.js'; 
 import { 
     generateNature, 
@@ -91,20 +91,29 @@ const myChatColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 70%)`;
 const socket = io("https://rng-server.onrender.com");
 let otherPlayers = {}; // 다른 유저 데이터를 담을 공간
 
-// 1. [수정] 플레이어 객체 (속도 대폭 상향!)
 const player = {
-    x: WORLD_WIDTH / 2, y: H * 0.85, vx: 0, 
-
-    accel: 1.5, friction: 0.82, maxSpeed: 12, 
+    x: WORLD_WIDTH / 2, 
+    y: H * 0.85, 
+    vx: 0, 
+    vy: 0,              // 수직 속도 (추가)
+    gravity: 0.8,       // 중력의 세기 (추가)
+    jumpPower: -15,     // 점프 힘 (음수일수록 높게 점프, 추가)
+    isGrounded: true,   // 땅에 닿아있는지 확인 (추가)
+    isDashing: false,
+    dashTimer: 0,        // 대쉬 지속 시간 (프레임 단위)
+    dashCooldown: 0,     // 다음 대쉬까지 남은 시간
+    dashSpeed: 35,       // 대쉬 순간 속도
+    dashDuration: 12,    // 대쉬가 유지될 프레임 (약 0.2초)
+    dashCooldownMax: 60,  // 대쉬 재사용 대기시간 (약 1초)
+    dashGhosts: [], // ★ 잔상 위치를 저장할 배열
     
+    // 기존 속성들...
+    accel: 1.5, friction: 0.82, maxSpeed: 12, 
     width: 24, height: 100,
     facingRight: true, walkFrame: 0,
     scarfSegments: Array.from({ length: 6 }, () => ({ x: WORLD_WIDTH / 2, y: H * 0.85 })),
-    
-    // ★ 체력/무적/회복 시스템 변수 포함
     hp: 100, maxHp: 100, invincibleTime: 0,
-    noDamageTimer: 0,
-    isDead: false, deathTimer: 0
+    noDamageTimer: 0, isDead: false, deathTimer: 0
 };
 
 // 인벤토리에 특정 오라가 몇 개 있는지 세는 함수
@@ -376,32 +385,21 @@ socket.on('playerMoved', (data) => {
 socket.on('playerLeft', (id) => {
     delete otherPlayers[id];
 });
-
-// ★ [멀티플레이 최적화] 상대방 공격 시작점 위치 보정 및 에러 해결
 socket.on('otherPlayerAttack', (data) => {
-    // ★ [추가] 설정이 꺼져있으면 아예 생성하지 않음 (가장 확실한 최적화)
     if (!GRAPHICS.showOtherAttacks) return;
-    let { chance, color, angle, id, nickname } = data; // 서버 데이터에서 id나 닉네임을 식별자로 사용
+    let { chance, color, angle, id, yOffset } = data; // yOffset을 받는다고 가정
     
-    // 1. 내 화면에 있는 '그 사람' 찾기
     let attacker = otherPlayers[id]; 
     let startX, startY;
 
     if (attacker) {
-        // [핵심] 받은 좌표가 아니라, 내 화면에 보이는 상대방의 실시간 위치를 계산
-        let isMoving = Math.abs(attacker.vx) > 0.1;
-        let animTime = (attacker.walkFrame || 0) * 0.1;
-        let breathing = Math.sin(globalRenderTime * 0.04) * 2;
-        let bounce = isMoving ? Math.abs(Math.sin(animTime)) * 4 : breathing;
-        
         startX = attacker.x;
-        startY = getGroundY(attacker.x) - 65 - bounce; // 가슴 높이 정밀 보정
+        // 내 화면의 지형 높이에 상대방의 오프셋을 적용하여 발사 위치 보정
+        startY = getGroundY(attacker.x) + (attacker.yOffset || 0) - 65; 
     } else {
-        // 못 찾았을 경우에만 받은 데이터의 좌표 사용 (예비책)
         startX = data.startX;
-        startY = data.startY;
+        startY = getGroundY(data.startX) + (data.yOffset || 0) - 65;
     }
-
     // 2. 각도 및 벡터 계산 (ReferenceError 해결)
     let finalAngle = (angle !== undefined) ? angle : 0;
     const spdX = Math.cos(finalAngle);
@@ -412,49 +410,21 @@ socket.on('otherPlayerAttack', (data) => {
     // [티어 1] 💫 유성탄
     if (chance < 1000) { 
         playSound('attack_1');
-        projectiles.push({ type: 1, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
+        projectiles.push({ type: 1, ownerId: data.id, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
     }
     // [티어 2] ⚔️ 쌍검기
     else if (chance < 1000000) { 
         playSound('attack_2'); // 🎵 슉!
         for (let i of [-1, 1]) {
-            // 간소화 아닐 때만 잔상 그리기
-            if (!GRAPHICS.simpleAuras) {
-                let trailGrad = ctx.createLinearGradient(-size * 1.5, 0, size, 0);
-                trailGrad.addColorStop(0, "transparent"); trailGrad.addColorStop(1, color);
-                ctx.fillStyle = trailGrad;
-                ctx.globalAlpha = finalAlpha * 0.4;
-                ctx.beginPath();
-                ctx.moveTo(-size * 1.5, size * 0.2);
-                ctx.quadraticCurveTo(0, -size * 1.8, size, 0);
-                ctx.quadraticCurveTo(0, size * 1.8, -size * 1.5, -size * 0.2);
-                ctx.fill();
-                // 다시 알파값 복구
-                ctx.globalAlpha = finalAlpha;
-            }
-
-            ctx.fillStyle = color;
-            ctx.globalAlpha = finalAlpha * 0.8;
-            ctx.beginPath();
-            ctx.moveTo(-size, size * 0.5);
-            ctx.bezierCurveTo(-size * 0.5, -size * 1.2, size * 0.5, -size * 1.2, size, 0);
-            ctx.bezierCurveTo(size * 0.5, -size * 0.6, -size * 0.5, -size * 0.6, -size, size * 0.5);
-            ctx.fill();
-
-            // 코어 (흰색)
-            ctx.fillStyle = "#fff";
-            ctx.globalAlpha = finalAlpha * 1.0;
-            ctx.beginPath();
-            ctx.moveTo(-size * 0.6, size * 0.2);
-            ctx.bezierCurveTo(-size * 0.2, -size * 0.9, size * 0.2, -size * 0.9, size * 0.7, -size * 0.1);
-            ctx.bezierCurveTo(size * 0.2, -size * 0.7, -size * 0.2, -size * 0.7, -size * 0.6, size * 0.2);
-            ctx.fill();
+                let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
+                let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
+                projectiles.push({ type: 2, ownerId: data.id, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
         }
     }
     // [티어 3] ⚡ 하이퍼 레이저
     else if (chance < 100000000) { 
         playSound('attack_3'); // 🎵 지이잉!
-        projectiles.push({ type: 3, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
+        projectiles.push({ type: 3, ownerId: data.id, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
         shakeIntensity = 15; applyScreenShake();
     }
     // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 5연발)
@@ -470,7 +440,7 @@ socket.on('otherPlayerAttack', (data) => {
                 let spread = (i - 2) * 0.12; 
                 let sAngle = angle + spread;
                 // 투사체 발사
-                projectiles.push({ type: 4, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
+                projectiles.push({ type: 4, ownerId: data.id, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
             }, i * 60); // 0.06초 간격으로 다다다닥!
         }
         shakeIntensity = 20; applyScreenShake();
@@ -479,7 +449,7 @@ socket.on('otherPlayerAttack', (data) => {
     else if (chance < 2400000000) { 
         playSound('attack_5'); // 🎵 촤라락!
         projectiles.push({ 
-            type: 5, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
+            type: 5, ownerId: data.id, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
             angle, life: 4.5, color, size: 140, rarity: chance, hitMobiles: [] 
         });
         shakeIntensity = 35; applyScreenShake();
@@ -487,10 +457,11 @@ socket.on('otherPlayerAttack', (data) => {
     // [티어 6] 🌌 차원 절단
     else { 
         playSound('attack_6'); // 🎵 콰아앙!
-        projectiles.push({ type: 6, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
+        projectiles.push({ type: 6, ownerId: data.id, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
         shakeIntensity = 70; applyScreenShake();
     }
 });
+
 
 // ★ [월드 동기화] 1. 시간 동기화 (해/달 위치, 하늘색 자동 변화)
 socket.on('timeSync', (serverTimeMinutes) => {
@@ -1306,11 +1277,37 @@ const scarfConfig = {
 
 const keys = { left: false, right: false };
 
-// 💡 [신규] 키보드 입력 감지 (방향키 및 A, D키 지원)
 window.addEventListener('keydown', (e) => {
+    if (e.key === ' ' || e.code === 'Space') {
+        if (document.activeElement !== chatInput) e.preventDefault(); // 스페이스 기본동작 차단
+    }
+
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
     if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+    
+    // 점프
+    if ((e.key === ' ' || e.key === 'w' || e.key === 'W') && player.isGrounded && !player.isDead) {
+        if (document.activeElement === chatInput) return;
+        player.vy = player.jumpPower;
+        player.isGrounded = false;
+        document.activeElement.blur(); 
+        playSound('click'); 
+    }
+
+    // ✅ 대쉬 발동 (Shift 키)
+    if (e.key === 'Shift') {
+        if (!player.isDead && !player.isDashing && player.dashCooldown <= 0) {
+            if (document.activeElement === chatInput) return;
+            player.isDashing = true;
+            player.dashTimer = player.dashDuration;
+            player.dashCooldown = player.dashCooldownMax;
+            player.invincibleTime = 20; // 대쉬 중 짧은 무적
+            playSound('attack_2');
+            shakeIntensity = 8; applyScreenShake();
+        }
+    }
 });
+
 window.addEventListener('keyup', (e) => {
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
     if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
@@ -2030,22 +2027,21 @@ function triggerAttack(mouseX, mouseY) {
     // [티어 1] 💫 유성탄
     if (chance < 1000) { 
         playSound('attack_1'); // 🎵 푝!
-        projectiles.push({ type: 1, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
+        projectiles.push({ type: 1, ownerId: socket.id, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, angle, life: 1.0, color, size: 25, rarity: chance});
     }
     // [티어 2] ⚔️ 쌍검기
     else if (chance < 1000000) { 
         playSound('attack_2'); // 🎵 슉!
         for (let i of [-1, 1]) {
-            // ... (기존 쌍검 생성 코드) ...
                 let offsetX = Math.cos(angle + Math.PI/2) * (i * 15);
                 let offsetY = Math.sin(angle + Math.PI/2) * (i * 15);
-                projectiles.push({ type: 2, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
+                projectiles.push({ type: 2, ownerId: socket.id, x: startX + offsetX, y: startY + offsetY, vx: spdX * 16, vy: spdY * 16, angle, life: 1.0, color, size: 45, rarity: chance });
         }
     }
     // [티어 3] ⚡ 하이퍼 레이저
     else if (chance < 100000000) { 
         playSound('attack_3'); // 🎵 지이잉!
-        projectiles.push({ type: 3, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
+        projectiles.push({ type: 3, ownerId: socket.id, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.0, color, width: 90, length: 1500, rarity: chance });
         shakeIntensity = 15; applyScreenShake();
     }
     // [티어 4] 🗡️ 성검 강림 (부채꼴 확산 5연발)
@@ -2061,7 +2057,7 @@ function triggerAttack(mouseX, mouseY) {
                 let spread = (i - 2) * 0.12; 
                 let sAngle = angle + spread;
                 // 투사체 발사
-                projectiles.push({ type: 4, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
+                projectiles.push({ type: 4, ownerId: socket.id, x: startX, y: startY, vx: Math.cos(sAngle) * 28, vy: Math.sin(sAngle) * 28, angle: sAngle, life: 1.5, color, size: 90, rarity: chance });
             }, i * 60); // 0.06초 간격으로 다다다닥!
         }
         shakeIntensity = 20; applyScreenShake();
@@ -2070,7 +2066,7 @@ function triggerAttack(mouseX, mouseY) {
     else if (chance < 2400000000) { 
         playSound('attack_5'); // 🎵 촤라락!
         projectiles.push({ 
-            type: 5, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
+            type: 5, ownerId: socket.id, x: startX, y: startY, vx: spdX * 12, vy: spdY * 12, 
             angle, life: 4.5, color, size: 140, rarity: chance, hitMobiles: [] 
         });
         shakeIntensity = 35; applyScreenShake();
@@ -2078,7 +2074,7 @@ function triggerAttack(mouseX, mouseY) {
     // [티어 6] 🌌 차원 절단
     else { 
         playSound('attack_6'); // 🎵 콰아앙!
-        projectiles.push({ type: 6, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
+        projectiles.push({ type: 6, ownerId: socket.id, x: startX, y: startY, vx: 0, vy: 0, angle, life: 1.2, color: "#fff", width: 550, length: 3000, rarity: chance });
         shakeIntensity = 70; applyScreenShake();
     }
 }
@@ -2435,45 +2431,91 @@ function render() {
     // ★ [수정됨] 플레이어 물리 (사망 시 조작 불가 + 부활 카운트)
     // -------------------------------------------------------------------
     
-    // 살아있을 때만 움직임 가능
-    if (!player.isDead) {
-        if (keys.left) { player.vx -= player.accel * dtFactor; player.facingRight = false; player.walkFrame += 1 * dtFactor; }
-        if (keys.right) { player.vx += player.accel * dtFactor; player.facingRight = true; player.walkFrame += 1 * dtFactor; }
-        if (!keys.left && !keys.right) { player.walkFrame = 0; }
-        
-        // 마찰력 및 위치 적용
-        player.vx = Math.max(-player.maxSpeed, Math.min(player.vx, player.maxSpeed));
-        player.vx *= Math.pow(player.friction, dtFactor);
-        player.x += player.vx * dtFactor;
+    // render() 함수 내의 플레이어 물리 로직 부분
 
-        // 맵 밖으로 못 나가게
+    if (!player.isDead) {
+        // --- [1단계: 잔상 수명 관리 (항상 실행)] ---
+        // 대쉬가 끝난 후에도 잔상은 남아있어야 하므로 이동 로직 밖에서 처리합니다.
+        for (let i = player.dashGhosts.length - 1; i >= 0; i--) {
+            player.dashGhosts[i].opacity -= 0.02 * dtFactor; // 서서히 투명해짐
+            if (player.dashGhosts[i].opacity <= 0) {
+                player.dashGhosts.splice(i, 1); // 투명도가 0이면 삭제
+            }
+        }
+
+        if (player.dashCooldown > 0) player.dashCooldown -= 1 * dtFactor;
+
+        if (player.isDashing) {
+            // --- [대쉬 중 상태] ---
+            player.vx = player.facingRight ? player.dashSpeed : -player.dashSpeed;
+            player.vy = 0;
+            player.dashTimer -= 1 * dtFactor;
+
+            // 2프레임마다 현재 위치를 배열에 저장 (이게 없으면 배열이 비어서 안 그려짐!)
+            player.dashGhosts.push({
+                x: player.x,
+                y: player.y,
+                facingRight: player.facingRight,
+                opacity: 0.6
+            });
+
+            if (globalRenderTime % 2 === 0) {
+                vfxParticles.spawnExplosion(player.x - cameraX, player.y - currentParallaxY * 50 - 50, "#fff", 3, 2);
+            }
+
+            if (player.dashTimer <= 0) {
+                player.isDashing = false;
+                player.vx *= 0.3;
+            }
+        } else {
+            // --- [일반 모드: 걷기/점프] ---
+            if (keys.left) { 
+                player.vx -= player.accel * dtFactor; 
+                player.facingRight = false; 
+                if(player.isGrounded) player.walkFrame += 1 * dtFactor; 
+            }
+            if (keys.right) { 
+                player.vx += player.accel * dtFactor; 
+                player.facingRight = true; 
+                if(player.isGrounded) player.walkFrame += 1 * dtFactor; 
+            }
+            if ((!keys.left && !keys.right) || !player.isGrounded) { player.walkFrame = 4; }
+
+            player.vx = Math.max(-player.maxSpeed, Math.min(player.vx, player.maxSpeed));
+            player.vx *= Math.pow(player.friction, dtFactor);
+            player.vy += (player.gravity || 0.8) * dtFactor;
+        }
+
+        // 실제 위치 업데이트
+        player.x += player.vx * dtFactor;
+        player.y += player.vy * dtFactor;
+
+        // 지형 판정 (기존 유지)
         if (player.x < 30) player.x = 30; 
         if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
-        
-        // 지형 높이 추적
-        player.y = getGroundY(player.x); 
+        const currentGroundY = getGroundY(player.x);
+        if (player.y >= currentGroundY) {
+            player.y = currentGroundY; player.vy = 0; player.isGrounded = true;
+        } else { player.isGrounded = false; }
 
     } else {
-        // ★ 죽어있는 동안 로직 (움직임 X, 타이머 감소)
-        player.vx = 0; // 멈춤
+        // --- [4. 사망 및 부활 로직: 기존 코드 그대로 유지] ---
+        player.vx = 0; 
         player.walkFrame = 0;
-        
         player.deathTimer -= dt;
         
-        // 타이머 텍스트 갱신
         const dTimer = document.getElementById("respawn-timer");
         if (dTimer) dTimer.innerText = Math.max(0, player.deathTimer).toFixed(1);
 
-        // 10초 경과 시 부활
         if (player.deathTimer <= 0) {
             player.isDead = false;
-            player.hp = 100; // 기본 체력으로 부활
-            player.x = WORLD_WIDTH / 2; // 마을 귀환
+            player.hp = 100;
+            player.x = WORLD_WIDTH / 2;
             player.y = getGroundY(player.x);
-            player.invincibleTime = 180; // 3초 무적
+            player.vy = 0; // 부활 시 속도 초기화 추가
+            player.invincibleTime = 180;
             player.noDamageTimer = -5;
             
-            // 오버레이 숨김
             document.getElementById("death-overlay").style.display = "none";
             showSideNotification("SYSTEM REBOOT", "생체 신호 복구 완료.", "#69F0AE");
             updateProfileUI();
@@ -2737,17 +2779,27 @@ function render() {
     ctx.restore();
     ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
 
-    // 3. 다른 플레이어 (멀티플레이)
     for (const [id, pData] of Object.entries(otherPlayers)) {
         if (pData.x > cameraX - 100 && pData.x < cameraX + W + 100) {
             ctx.save();
-            ctx.translate(pData.x, getGroundY(pData.x));
+            
+            // ★ 내 화면에서의 이 유저 위치의 바닥 좌표를 계산
+            const localGroundY = getGroundY(pData.x);
+            // ★ 내 바닥 좌표 + 상대방이 보내준 높이 오프셋
+            const renderY = localGroundY + (pData.yOffset || 0);
+
+            ctx.translate(pData.x, renderY);
+
+            if (pData.isGrounded === false) {
+                ctx.scale(0.9, 1.1);
+            }
+
             drawOtherPlayer(
                 ctx, 
                 pData, 
                 globalRenderTime, 
                 GRAPHICS,
-                getGroundY // 함수 자체를 넘김
+                getGroundY 
             );
             
             ctx.restore();
@@ -2766,9 +2818,24 @@ function render() {
         ctx.stroke();
     }
 
+    // ==========================================
+    // ★ [여기 수정] 잔상 그리기 (내 플레이어 뒤에 위치)
+    // ==========================================
+    const currentAura = allAuras.find(a => a.name === equippedAuraName);
+    const auraColor = currentAura ? currentAura.color : "#ffffff";
+
+    player.dashGhosts.forEach(g => {
+        ctx.save();
+        drawGhost(ctx, g, auraColor); // Renderer.js에 있는 drawGhost 호출
+        ctx.restore();
+    });
+
     // 4. 내 플레이어 
+
+    // 2. 실제 내 플레이어 그리기 (이제 찌부시키는 scale 코드는 지우셔도 됩니다!)
     ctx.save();
     ctx.translate(player.x, player.y);
+
     // ★★★ [수정] 이렇게 변수들을 순서대로 넘겨줍니다!
     drawPlayer(
         ctx, 
@@ -2886,18 +2953,9 @@ function render() {
                 if (distSq < radiusSum * radiusSum) isHit = true;
             }
 
-            // [수정] 몬스터 피격 처리 (랜덤 데미지 + 메이플 스타일 숫자)
             if (isHit) {
-                // 1. 타격 이펙트 (간소화 모드 체크)
-                if (!GRAPHICS.simpleProjectiles) {
-                    if(globalRenderTime % 5 === 0) playSound('success');
-                    vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, "#FFF", 5, 5);
-                }
-
-                // 2. ★ 데미지 랜덤 계산 (핵심)
+                // 1. 데미지 계산을 '먼저' 해야 합니다! (ReferenceError 방지)
                 let baseDamage = (p.rarity || 1) / 10;
-                
-                // 타입별 보정
                 if(p.type === 1) baseDamage *= 0.3;
                 if(p.type === 2) baseDamage *= 0.2;
                 if(p.type === 3) baseDamage *= 0.35;
@@ -2905,36 +2963,59 @@ function render() {
                 if(p.type === 5) baseDamage *= 0.4;
                 if(p.type === 6) baseDamage = Math.max(999, baseDamage);
 
-                // ★ 랜덤 난수 (0.8 ~ 1.2배)
                 let variance = 0.8 + Math.random() * 0.4; 
-                let finalDamage = baseDamage * variance;
-                
-                // 크리티컬 판정 (1.1배 이상 터지면 크리!)
+                let finalDamage = baseDamage * variance; // ✅ 이제 사용 준비 완료
                 let isCrit = variance > 1.1;
 
-                if (isCrit) playSound('hit_crit');   // 💥 크리티컬 사운드
-                else playSound('hit_normal');        // 퍽 일반 사운드
-
-                // 3. 체력 깎기
+                // 2. 이후에 몬스터 HP 감소 및 텍스트 출력
                 c.hp -= finalDamage; 
                 c.hitTime = 10; 
-                c.x += Math.cos(p.angle || 0) * 5; // 넉백
+                c.x += Math.cos(p.angle || 0) * 5;
 
-                // 4. ★ 데미지 숫자 띄우기 (화면 좌표 기준)
+                if (isCrit) playSound('hit_crit');
+                else playSound('hit_normal');
+
                 spawnDamageText(c.x - cameraX, c.y - currentParallaxY * 50 - 40, finalDamage, isCrit);
 
-                // 5. 투사체 처리
+                if (c.hp <= 0 && !c.alreadyDead) {
+                    c.alreadyDead = true; 
+
+                    // 공격의 주인(ownerId)이 나(socket.id)인 경우에만 보상 지급
+                    if (p.ownerId === socket.id) {
+                        playSound('star');
+                        let drop = c.typeData.drop;
+                        consumableInv[drop] = (consumableInv[drop] || 0) + 1;
+                        spawnItemLog(drop);
+
+                        let baseXP = c.maxHp / 10;
+                        let bonusMultiplier = 1 + (c.maxHp / 5000); 
+                        let xpGain = Math.max(10, Math.floor(baseXP * bonusMultiplier));
+                        
+                        addExp(xpGain);
+
+                        damageLabels.push({
+                            x: c.x - cameraX, 
+                            y: c.y - currentParallaxY * 50 - 140,
+                            text: `+${xpGain.toLocaleString()} XP`,
+                            life: 2.5, vy: -0.5, scale: 1.3,
+                            customColor: "#00E5FF"
+                        });
+                    }
+                    c.shouldRemove = true; 
+                }
+
+                // 4. 투사체 소멸 처리
                 if (p.type === 5) {
                     if (!p.hitMobiles) p.hitMobiles = [];
                     p.hitMobiles.push(c.id);
                 } else if (p.type !== 3 && p.type !== 6) {
-                    p.life = 0; // 일반 투사체 소멸
+                    p.life = 0; 
                 }
                 
                 break; 
             }
         } // 몬스터 루프 끝
-    } // 투사체 루프 끝
+    }
 
         // [수정] 몬스터 사망 처리 (비선형 경험치 적용 + XP 텍스트 최적화)
         if (c.hp <= 0) {
@@ -3081,15 +3162,19 @@ function render() {
     });
     ctx.globalAlpha = 1.0;
 
-    if (globalRenderTime % 3 === 0) { 
-        socket.emit('playerMove', { 
-            x: player.x, y: player.y, 
-            vx: player.vx, 
-            facingRight: player.facingRight, 
-            aura: equippedAuraName || "COMMON", 
-            nickname: myNickname 
-        });
-    }
+    // 내 현재 바닥 위치와의 차이를 계산 (공중에 있으면 음수, 바닥이면 0)
+    const yOffset = player.y - getGroundY(player.x);
+
+    socket.emit('playerMove', { 
+        x: player.x, 
+        yOffset: yOffset,
+        isDashing: player.isDashing, // ★ 추가
+        vx: player.vx, 
+        facingRight: player.facingRight, 
+        isGrounded: player.isGrounded,
+        aura: equippedAuraName || "COMMON", 
+        nickname: myNickname 
+    });
 
     // 60프레임 중 5프레임 정도마다 UI 갱신 (약 0.1초마다)
     if (globalRenderTime % 3 === 0) {

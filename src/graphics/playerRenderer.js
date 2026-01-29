@@ -12,6 +12,37 @@ const TWO_PI = Math.PI * 2;
 
 function drawMagicCircle(ctx, x, y, radius, angle, color, alpha) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.shadowBlur = 20; ctx.shadowColor = color; ctx.beginPath(); ctx.arc(0, 0, radius, 0, TWO_PI); ctx.stroke(); ctx.beginPath(); for(let i=0; i<6; i++) { let a = (TWO_PI/6)*i; ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*radius, Math.sin(a)*radius); } ctx.stroke(); ctx.beginPath(); for(let i=0; i<6; i++) { let a = (TWO_PI/6)*i; ctx.moveTo(Math.cos(a)*radius, Math.sin(a)*radius); ctx.lineTo(Math.cos(a+TWO_PI/3)*radius, Math.sin(a+TWO_PI/3)*radius); } ctx.stroke(); ctx.restore(); }
 
+export function drawGhost(ctx, ghost, auraColor) {
+    ctx.save();
+    
+    // 1. 위치로 이동
+    ctx.translate(ghost.x, ghost.y);
+    ctx.globalAlpha = ghost.opacity;
+    ctx.globalCompositeOperation = 'lighter'; // 빛을 겹치게 해서 부드럽게 연결
+
+    // 2. ★ 파격적으로 늘리기 (가로는 3배 늘리고 세로는 0.4배로 압축)
+    // 이렇게 하면 잔상끼리 서로 겹쳐서 '울타리' 느낌이 사라집니다.
+    if (!ghost.facingRight) ctx.scale(-1, 1);
+    ctx.scale(3.0, 0.4); 
+
+    // 3. ★ 그라데이션 실루엣 (꼬리 부분은 투명하게)
+    // x축 -20부터 20까지 뒤로 갈수록 사라지는 효과
+    let grad = ctx.createLinearGradient(15, 0, -30, 0);
+    grad.addColorStop(0, auraColor);      // 앞부분은 선명
+    grad.addColorStop(1, "transparent"); // 뒷부분은 흐릿
+
+    ctx.fillStyle = grad;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = auraColor;
+
+    // 4. 형태 그리기 (더 유선형으로)
+    ctx.beginPath();
+    // 둥근 캡슐 형태로 그려서 에너지 탄환 같은 느낌을 줍니다.
+    ctx.roundRect(-10, -50, 40, 100, 50); 
+    ctx.fill();
+
+    ctx.restore();
+}
 
 // [수정] 플레이어 그리기 (좌표 꼬임 버그 수정됨)
 export function drawPlayer(ctx, player, globalRenderTime, equippedAuraName, myNickname, GRAPHICS) {
