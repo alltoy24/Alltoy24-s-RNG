@@ -2,9 +2,9 @@
 console.log("✅ [mobBehavior.js] V2.0 로드됨 (제동 장치 장착 완료)");
 
 import { calculateGroundY } from './geography.js';
+const VIRTUAL_H = 1080;
 
-const GAME_H = 1080; // 고정 높이
-const getGroundY = (x) => calculateGroundY(x, GAME_H, 1.0);
+const getGroundY = (x) => calculateGroundY(x, VIRTUAL_H, 1.0);
 
 // ========================================================
 // 1. [두뇌] AI 업데이트
@@ -143,7 +143,7 @@ function aiWander(mob) {
 // ========================================================
 // 2. [몸] 물리 엔진
 // ========================================================
-export function applyMobMovement(mob, dt) {
+export function applyMobMovement(mob, dt, realH) {
     const mType = mob.typeData.moveType || "walk";
     
     // AI 속도 적용 (돌진/브레이크 아닐 때만)
@@ -163,7 +163,7 @@ export function applyMobMovement(mob, dt) {
 
     if (mob.typeData.aiType !== "flying_ram" && mType !== "float" && mType !== "glitch") {
         mob.vy += 0.5; // Gravity
-        const groundY = getGroundY(mob.x);
+        const groundY = calculateGroundY(mob.x, realH, 1.0);
         
         if (mob.y >= groundY) {
             mob.y = groundY;

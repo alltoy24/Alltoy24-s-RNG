@@ -1417,6 +1417,14 @@ function forceResize() {
             generateNature(canvas, vfxCanvas, W, H, WORLD_WIDTH);
         }
     }
+
+    // ★ 창 크기 변경 시 기존 몹들의 위치 강제 보정
+    critters.forEach(c => {
+        // 공중에 떠 있는 몹이 아니라면 땅 위치 재계산
+        if (c.typeData.moveType !== "float") {
+            c.y = getGroundY(c.x); 
+        }
+    });
 }
 
 // 전역 연결 (HTML 버튼에서도 쓰게)
@@ -2729,7 +2737,7 @@ function render() {
             const newMob = {
                 id: Date.now() + Math.random(),
                 x: startX, 
-                y: getGroundY(startX), 
+                y: getGroundY(startX),
                 vx: 0,
                 vy: 0,
                 targetVx: 0,
@@ -2765,7 +2773,7 @@ function render() {
 
         // (2) 몸 가동: "어떻게 움직일까?" 실행 
         // (실제 x, y 좌표 이동, 중력, 지형 충돌, 맵 밖 이탈 방지가 여기서 처리됨)
-        applyMobMovement(c, dt); 
+        applyMobMovement(c, dt, H); 
         // ★ 여기 추가: 플레이어 피격 판정 (몸박)
         if (!player.isDead && player.invincibleTime <= 0 && c.hp > 0) {
             let dist = Math.abs(player.x - c.x);
@@ -2786,8 +2794,9 @@ function render() {
         if (c.x > cameraX - 200 && c.x < cameraX + W + 200) { // 화면 근처에 있을 때만
             ctx.save();
             ctx.translate(-cameraX, -currentParallaxY * 50);
+            const groundOffset = H - 1080;
             let bounce = (c.typeData.moveType === "hop") ? Math.abs(Math.sin(c.animTime)) * 10 : 0;
-            ctx.translate(c.x, c.y - bounce); // 월드 좌표 기준으로 이동
+            ctx.translate(c.x, c.y + groundOffset - bounce);
 
             if (c.vx < 0) ctx.scale(-1, 1);
             drawCritter(ctx, c, globalRenderTime); // 그리기 실행
