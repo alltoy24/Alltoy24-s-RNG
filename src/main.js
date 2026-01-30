@@ -9,8 +9,7 @@ import {
     getCurrentSkyColors, 
     getGroundY, 
     renderLand, 
-    renderTrees, 
-    renderRuins, 
+    renderTrees,  
     renderGrass,
     landscapes, trees, grassBlades, stars, clouds, ruins 
 } from './graphics/background.js';
@@ -43,11 +42,22 @@ import {
     smoothAudioTransition, fadeOutBGM, restoreBGM,
     COMBAT_SFX
 } from './audioManager.js';
+import { BiomeManager } from './logic/biomeManager.js'; // 1. 클래스 가져오기
+import { drawCritter } from './graphics/mobRenderer.js'; // ★ 이거 추가!
+import { updateMobAI, applyMobMovement } from './logic/mobBehavior.js';
 
-// 2. ★ [수정] 전역 변수 및 캔버스 초기화 (여기서 getElementById를 꼭 해야 함!)
-let W = window.innerWidth; 
+// 2. 객체 생성 (ReferenceError 해결의 핵심)
+const biomeMgr = new BiomeManager();
+
+// main.js 상단 전역 변수 수정
+let W = window.innerWidth;
 let H = window.innerHeight;
-const WORLD_WIDTH = 10000;
+
+// 기준 해상도 (가로 1920을 기준으로 모든 크기를 계산해서 맵핵 방지)
+const BASE_W = 1920;
+let scaleRatio = 1;
+
+const WORLD_WIDTH = 325000;
 
 let fragments = 0; 
 let inventory = []; 
@@ -62,6 +72,7 @@ let isRolling = false;
 let currentResult = null;
 let isAutoRolling = false;
 let autoRollTimer = null;
+let rewardShards = []; // 빨려 들어오는 조각들을 담을 배열
 
 // ★★★ 여기서 canvas를 확실하게 찾아서 변수에 담습니다!
 const canvas = document.querySelector("#game-canvas");
@@ -92,7 +103,7 @@ const socket = io("https://rng-server.onrender.com");
 let otherPlayers = {}; // 다른 유저 데이터를 담을 공간
 
 const player = {
-    x: WORLD_WIDTH / 2, 
+    x: 150000, 
     y: H * 0.85, 
     vx: 0, 
     vy: 0,              // 수직 속도 (추가)
@@ -1382,23 +1393,30 @@ function drawSharedMeteor(ctx, x, y, angle, size, color, isMain, progress) {
     ctx.restore();
 }
 
-// ★ [복구] 화면 크기 조절 함수 (이게 없어서 화면이 깨진 겁니다)
 function forceResize() {
     W = window.innerWidth;
     H = window.innerHeight;
-    
+
+    // 가로 1920 대비 현재 창이 얼마나 큰지 비율 계산
+    scaleRatio = W / BASE_W;
+
     if (canvas && vfxCanvas) {
-        canvas.width = W; 
+        // 캔버스 크기를 브라우저 창 크기와 1:1로 맞춤 (블랙바 제거)
+        canvas.width = W;
         canvas.height = H;
-        vfxCanvas.width = W; 
+        vfxCanvas.width = W;
         vfxCanvas.height = H;
-        
-        // 배경 재생성
+
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        vfxCanvas.style.width = W + "px";
+        vfxCanvas.style.height = H + "px";
+
+        // 배경 재생성 (바뀐 H값 적용)
         if(typeof generateNature === 'function') {
             generateNature(canvas, vfxCanvas, W, H, WORLD_WIDTH);
         }
     }
-    window.scrollTo(0, 0);
 }
 
 // 전역 연결 (HTML 버튼에서도 쓰게)
@@ -1449,200 +1467,17 @@ const weathers = [
 ];
 let currentWeather = weathers[0];
 
-// ★ [최종 수정] 몬스터 그리기 (피격 시 화이트 플래시 적용)
-function drawCritterSprite(ctx, c) {
-    const size = c.typeData.size || 15;
-    const isHit = c.hitTime > 0; // 맞았는지 확인
-    const baseColor = c.typeData.color;
-    const id = c.typeData.drop; 
-    const time = globalRenderTime * 0.05; 
-    const fastTime = globalRenderTime * 0.2;
-
-    // 간소화 모드면 그냥 기존대로 (성능 위해)
-    const isSimple = (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleMobs);
-
-    ctx.save();
-    ctx.translate(0, -size); 
-
-    // [간소화 모드] 그냥 원 그리기
-    if (isSimple) {
-        ctx.fillStyle = isHit ? "#FFFFFF" : baseColor; // 맞으면 흰색
-        ctx.strokeStyle = ctx.fillStyle;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.restore();
-        return;
-    }
-
-    // [일반 모드] 스프라이트 그리기
-    // ★ 핵심: 맞았으면 그림자 제거, 아니면 원래 색 그림자
-    ctx.shadowBlur = isHit ? 0 : 15;
-    ctx.shadowColor = baseColor;
-    
-    // ★ 색상 도우미 함수: 맞았으면 무조건 흰색 리턴
-    const getColor = (normalColor) => isHit ? "#FFFFFF" : normalColor;
-    
-    // 기본 스타일 설정
-    ctx.fillStyle = getColor(baseColor);
-    ctx.strokeStyle = getColor(baseColor);
-
-    // 1. 🐿️ 햇살 다람쥐
-    if (id === "nut_light") {
-        ctx.save();
-        ctx.rotate(Math.sin(time) * 0.15);
-        
-        // 꼬리 그라데이션
-        let tailGrad = ctx.createLinearGradient(-size*2, 0, 0, -size*3);
-        tailGrad.addColorStop(0, "#E65100"); tailGrad.addColorStop(1, "#FFB300");
-        ctx.fillStyle = getColor(tailGrad); // ★ 그라데이션도 흰색으로 치환됨
-        
-        ctx.beginPath();
-        ctx.moveTo(0, size * 0.5);
-        ctx.bezierCurveTo(-size * 5, size * 0.5, -size * 4, -size * 5, 0, -size * 4);
-        ctx.bezierCurveTo(size * 1.5, -size * 3, size * 2.5, size, 0, size * 0.5);
-        ctx.fill();
-        ctx.restore();
-
-        ctx.fillStyle = getColor(baseColor);
-        ctx.beginPath(); ctx.ellipse(0, 0, size * 1.1, size * 1.3, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(size*0.3, -size * 1.3, size * 0.8, 0, Math.PI*2); ctx.fill();
-        
-        for(let s of [-1, 1]) {
-            ctx.save(); ctx.translate(s*size*0.3 + size*0.3, -size*1.8);
-            ctx.beginPath(); ctx.ellipse(0, 0, size*0.25, size*0.6, s*0.2, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle=getColor("#FFAB91"); 
-            ctx.beginPath(); ctx.ellipse(0, 0, size*0.1, size*0.4, s*0.2, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-        }
-    }
-    // 2. 🐸 비구름 개구리
-    else if (id === "frog_skin") {
-        let frogGrad = ctx.createRadialGradient(0, -size*0.5, size*0.2, 0, 0, size*1.5);
-        frogGrad.addColorStop(0, baseColor); frogGrad.addColorStop(1, "#1B5E20");
-        
-        ctx.fillStyle = getColor(frogGrad);
-        ctx.beginPath(); ctx.ellipse(0, 0, size*1.5, size*0.8, 0, 0, Math.PI*2); ctx.fill();
-        
-        ctx.lineWidth = 5; ctx.strokeStyle = getColor(baseColor);
-        for(let i=0; i<2; i++) {
-            let side = i === 0 ? -1 : 1;
-            ctx.beginPath(); ctx.arc(side*size*0.8, size*0.2, size*0.6, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(side*size, size*0.5); ctx.lineTo(side*size*1.5, size*0.8); ctx.stroke();
-        }
-        for(let s of [-1, 1]) {
-            ctx.save(); ctx.translate(s*size*0.7, -size*0.8);
-            ctx.beginPath(); ctx.arc(0, 0, size*0.6, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-        }
-    }
-    // 3. 🐰 눈꽃토끼
-    else if (id === "rabbit_fur") {
-        ctx.fillStyle = getColor(baseColor);
-        for(let i=0; i<5; i++) {
-            let ang = (i / 5) * Math.PI * 2;
-            ctx.beginPath(); ctx.arc(Math.cos(ang)*size*0.3 - size, Math.sin(ang)*size*0.3 + size*0.5, size*0.45, 0, Math.PI*2); ctx.fill();
-        }
-        let bunnyGrad = ctx.createRadialGradient(-size*0.3, -size*0.3, size*0.2, 0, 0, size*1.8);
-        bunnyGrad.addColorStop(0, "#FFFFFF"); bunnyGrad.addColorStop(1, "#CFD8DC");
-        
-        ctx.fillStyle = getColor(bunnyGrad);
-        ctx.beginPath(); ctx.moveTo(-size, size); ctx.bezierCurveTo(-size*1.8, -size*2, size*1.8, -size*2, size, size); ctx.fill();
-        for(let s of [-1, 1]) {
-            ctx.save(); ctx.translate(s*size*0.4, -size*1.2); ctx.rotate(s*0.2 + Math.sin(time)*0.1); 
-            ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.3, size*1.1, 0, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle=getColor("#F8BBD0"); 
-            ctx.beginPath(); ctx.ellipse(0, -size*0.6, size*0.15, size*0.8, 0, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-        }
-        ctx.fillStyle=getColor("#F06292"); ctx.beginPath(); ctx.arc(size*0.6, -size*0.3, 3, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle=getColor("rgba(0,0,0,0.1)"); ctx.lineWidth=1;
-        for(let i=-1; i<=1; i++) { ctx.beginPath(); ctx.moveTo(size*0.6, -size*0.3); ctx.lineTo(size*1.2, -size*0.3 + i*5); ctx.stroke(); }
-    }
-    // 4. 🌪️ 바람 정령
-    else if (id === "spirit_wing") {
-        ctx.save();
-        for(let i=0; i<4; i++) {
-            ctx.rotate(time * (i%2?1:-1) + i); 
-            ctx.strokeStyle = getColor(baseColor); 
-            ctx.lineWidth = 2; 
-            // 맞았을 때는 투명도 없이 완전 하얗게
-            ctx.globalAlpha = isHit ? 1.0 : 0.4; 
-            ctx.beginPath(); ctx.ellipse(0, 0, size*(1.5+i*0.2), size*(0.5+i*0.1), 0, 0, Math.PI*2); ctx.stroke();
-        }
-        ctx.restore();
-        let coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size); 
-        coreGrad.addColorStop(0, "#FFF"); coreGrad.addColorStop(1, "transparent");
-        ctx.fillStyle = getColor(coreGrad);
-        ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI*2); ctx.fill();
-    }
-    // 5. 🦎 전기 도마뱀
-    else if (id === "volt_scale") {
-        ctx.fillStyle = getColor(baseColor);
-        ctx.beginPath(); ctx.moveTo(-size, 0); ctx.quadraticCurveTo(0, -size*1.5, size*2, 0); ctx.quadraticCurveTo(0, size, -size, 0); ctx.fill();
-        ctx.strokeStyle=getColor("rgba(0,0,0,0.2)"); ctx.lineWidth=1; 
-        for(let x=-size; x<size; x+=5) { ctx.beginPath(); ctx.moveTo(x, -size*0.5); ctx.lineTo(x+5, size*0.5); ctx.stroke(); }
-        
-        ctx.shadowBlur = isHit ? 0 : 30; ctx.lineWidth = 6; ctx.lineJoin = "round";
-        ctx.strokeStyle = getColor(baseColor);
-        ctx.beginPath(); ctx.moveTo(-size*0.8, 0); ctx.lineTo(-size*2, -size); ctx.lineTo(-size*2.5, 0); ctx.lineTo(-size*4, -size*1.5); ctx.stroke();
-    }
-    // 6. 🧚 안개 요정
-    else if (id === "fairy_dust") {
-        let flap = Math.sin(fastTime) * 0.5;
-        ctx.save(); 
-        ctx.globalAlpha = isHit ? 1.0 : 0.5;
-        ctx.fillStyle = getColor(baseColor);
-        for(let s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(s*size*3, -size*3*flap, s*size*3, size*2, 0, 0); ctx.fill(); }
-        ctx.restore();
-        ctx.fillStyle = getColor(baseColor);
-        ctx.beginPath(); ctx.arc(0, 0, size*0.5, 0, Math.PI*2); ctx.fill();
-    }
-    // 7. 🐦‍⬛ 그림자 까마귀
-    else if (id === "shadow_beak") {
-        let flap = Math.sin(fastTime) * size;
-        ctx.fillStyle = getColor(baseColor);
-        for(let s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, -size*0.5); ctx.quadraticCurveTo(s*size*3, -size*2 + flap, s*size*1.5, size); ctx.lineTo(0, 0); ctx.fill(); }
-        ctx.beginPath(); ctx.arc(0, -size*1.2, size*0.8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(0, 0, size*0.8, size*1.3, 0, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle=getColor("#FF9100"); 
-        ctx.beginPath(); ctx.moveTo(size*0.6, -size*1.3); ctx.lineTo(size*1.8, -size*1.1); ctx.lineTo(size*0.6, -size*0.9); ctx.fill();
-    }
-    // 8. 🦇 핏빛 박쥐
-    else if (id === "blood_fang") {
-        let flap = Math.abs(Math.sin(fastTime)) * size * 1.5;
-        ctx.fillStyle = getColor(baseColor);
-        ctx.beginPath(); ctx.moveTo(0, -size);
-        for(let s of [1, -1]) { ctx.bezierCurveTo(s*size*2, -size*2.5 + flap, s*size*4, size*flap*0.1, s*size, size); ctx.lineTo(0, 0); }
-        ctx.fill(); ctx.beginPath(); ctx.arc(0, -size*0.5, size*0.7, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle=getColor("#FFF"); 
-        ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(-1, 5); ctx.lineTo(1, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(1, 5); ctx.lineTo(-1, 0); ctx.fill();
-    }
-    // 9. 👾 V̵O̵I̵D̵_B̴U̷G̸
-    else if (id === "core_glitch") {
-        for(let i=0; i<12; i++) {
-            ctx.fillStyle = getColor(Math.random() < 0.5 ? "#FF003C" : "#00FFFF");
-            let w = Math.random()*size*4, h = 2 + Math.random()*5;
-            ctx.fillRect((Math.random()-0.5)*size*5, (Math.random()-0.5)*size*5, w, h);
-        }
-        ctx.fillStyle = getColor("#FFF"); 
-        ctx.font = "bold 20px monospace"; ctx.fillText(Math.random().toString(16).slice(2, 4), -10, 0);
-    }
-    // 나머지 (예외 처리)
-    else {
-            ctx.fillStyle = getColor(baseColor);
-            ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI*2); ctx.fill();
-    }
-
-    ctx.restore();
-}
-
 let mouseParallaxY = 0;
 
 window.addEventListener("mousemove", (e) => { 
-    //targetParallaxX = (e.clientX - W / 2) / (W / 2); 
-    // targetParallaxY 대신 mouseParallaxY 사용
-    mouseParallaxY = (e.clientY - H / 2) / (H / 2); 
+    // 마우스 패럴랙스 효과도 배율 보정
+    let rect = canvas.getBoundingClientRect();
+    // 캔버스 밖이면 0 처리 하거나 보정
+    let localY = (e.clientY - rect.top) / scaleRatio;
+    
+    mouseParallaxY = (localY - H / 2) / (H / 2); 
 });
+
 // ★ [기믹 2] 별똥별 스폰 로직 ★
 function spawnShootingStar() {
     // 밤 시간(18~06)에만 생성. 월식/글리치일 때는 색상 변화
@@ -1751,6 +1586,18 @@ function renderLightning(ctx) {
         if(boltObj.life <= 0) lightningBolts.splice(i, 1);
     }
     ctx.restore();
+}
+
+// main.js 내부 적절한 곳에 추가
+function resetBrowserZoom() {
+    // 1. CSS zoom 속성을 이용해 강제로 100% 설정 (대부분의 모던 브라우저)
+    document.body.style.zoom = "1.0";
+
+    // 2. 혹시 모를 배율 꼬임 방지를 위해 뷰포트 메타 태그 재설정
+    const viewport = document.querySelector('meta[name="viewport"]');
+    if (viewport) {
+        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+    }
 }
 
 function spawnWeatherParticle() {
@@ -1870,8 +1717,9 @@ function renderSpawns(ctx) {
 // 클릭 이벤트 수정: 채집물은 클릭, 몬스터는 오직 공격으로만!
 canvas.addEventListener('pointerdown', (e) => {
     let rect = canvas.getBoundingClientRect(); 
-    let clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
-    let clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    // 보정 없이 직접 좌표 추출
+    let clickX = (e.clientX - rect.left);
+    let clickY = (e.clientY - rect.top);
 
     // 1. 별똥별 캐치 (클릭 유지)
     for (let i = shootingStars.length - 1; i >= 0; i--) {
@@ -2080,11 +1928,14 @@ function triggerAttack(mouseX, mouseY) {
 }
 
 function render() { 
+    globalRenderTime++;
     // ★★★ [누락되었던 핵심 코드 추가] ★★★
     // 이 코드가 없으면 시간(dt)이 0이라서 회복 타이머가 안 올라갑니다.
     const now = performance.now();
     dt = (now - lastFrameTime) / 1000; 
     lastFrameTime = now;
+
+
     
     // 렉 걸렸을 때 순간이동 방지 (최대 0.1초까지만 인정)
     if (dt > 0.1) dt = 0.1; 
@@ -2190,26 +2041,27 @@ function render() {
 
     updateScarfPhysics();
     
-    let targetSky = getCurrentSkyColors(preciseHour, currentWeather);
-    let tTop = targetSky.top;
-    let tBot = targetSky.bot;
-
-    if (!isSkyInitialized) {
-        currentSkyTop = [...tTop]; currentSkyBot = [...tBot];
-        isSkyInitialized = true;
-    } else {
-        currentSkyTop[0] += (tTop[0] - currentSkyTop[0]) * 0.015;
-        currentSkyTop[1] += (tTop[1] - currentSkyTop[1]) * 0.015;
-        currentSkyTop[2] += (tTop[2] - currentSkyTop[2]) * 0.015;
-        currentSkyBot[0] += (tBot[0] - currentSkyBot[0]) * 0.015;
-        currentSkyBot[1] += (tBot[1] - currentSkyBot[1]) * 0.015;
-        currentSkyBot[2] += (tBot[2] - currentSkyBot[2]) * 0.015;
+    // 1. 순수 날씨 기반 색상 가져오기
+    const targetSky = getCurrentSkyColors(preciseHour, currentWeather);
+    
+    // 2. 부드러운 전환을 위해 기존 변수에 색상 주입
+    for(let i=0; i<3; i++) {
+        currentSkyTop[i] = lerp(currentSkyTop[i], targetSky.top[i], 0.05);
+        currentSkyBot[i] = lerp(currentSkyBot[i], targetSky.bot[i], 0.05);
     }
 
+    // 3. 하늘 그라데이션 그리기
     let grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, `rgb(${Math.round(currentSkyTop[0])},${Math.round(currentSkyTop[1])},${Math.round(currentSkyTop[2])})`);
     grad.addColorStop(1, `rgb(${Math.round(currentSkyBot[0])},${Math.round(currentSkyBot[1])},${Math.round(currentSkyBot[2])})`);
-    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = grad; 
+    ctx.fillRect(0, 0, W, H);
+
+    // 4. VOID 날씨 전용 노이즈 효과
+    if (currentWeather.id === "glitch") {
+        ctx.fillStyle = `rgba(255, 0, 255, ${Math.random() * 0.02})`;
+        ctx.fillRect(0, 0, W, H);
+    }
 
     let shouldHideSky = (currentWeather.id === "cloudy" || currentWeather.id === "foggy" || currentWeather.id === "thunder" || currentWeather.id === "glitch");
     targetSkyAlpha = shouldHideSky ? 0 : 1;
@@ -2389,42 +2241,38 @@ function render() {
     // =======================================================
 
     // 1. [아주 먼 배경] 맨 뒷산 뒤의 거대 기둥 (Depth: 0.1 ~ 0.16)
-    // 인자: ctx, cameraX, currentParallaxY, currentFog, fogRgb, minD, maxD, W, H
-    renderRuins(ctx, cameraX, currentParallaxY, currentFog, fogRgb, 0.0, 0.16, W, H);
     
     // 2. [원경] 맨 뒷산 (Depth: 0.15)
     // 인자: ctx, layer, index, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours
-    renderLand(ctx, landscapes[0], 0, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours, WORLD_WIDTH);
+    renderLand(ctx, landscapes[0], 0, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr);
     renderWeatherLayer(0.1, 0.2); 
 
-    // 3. [중경 1] 뒷산과 앞산 사이의 기둥들 (Depth: 0.16 ~ 0.36)
-    renderRuins(ctx, cameraX, currentParallaxY, currentFog, fogRgb, 0.16, 0.36, W, H);
-
     // 4. [중경 2] 앞산 (Depth: 0.35)
-    renderLand(ctx, landscapes[1], 1, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours, WORLD_WIDTH);
+    renderLand(ctx, landscapes[1], 1, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr);
     renderWeatherLayer(0.2, 0.4); 
 
-    // 5. [근경 1] 앞산과 언덕 사이의 기둥들 (Depth: 0.36 ~ 0.71)
-    renderRuins(ctx, cameraX, currentParallaxY, currentFog, fogRgb, 0.36, 0.71, W, H);
-
     // [나무 렌더링]
-    // 인자: ctx, layerIndex, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather
     renderTrees(ctx, 2, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather);
 
+    // 1. 근경 풀 (0.7) - 땅보다 먼저 그려서 뒤로 숨김 (심어진 느낌)
+    if (GRAPHICS.showGrass) {
+        // 맨 뒤에 0.7을 넣어서 근경 풀만 그립니다.
+        renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W, globalRenderTime, biomeMgr, 0.7);
+    }
+
     // 6. [근경 2] 언덕 (Depth: 0.7)
-    renderLand(ctx, landscapes[2], 2, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours, WORLD_WIDTH);
+    renderLand(ctx, landscapes[2], 2, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr);
     renderWeatherLayer(0.4, 0.7); 
 
-    // 7. [전경] 플레이어 바로 뒤/옆에 있는 거대 기둥 (Depth: 0.71 이상)
-    renderRuins(ctx, cameraX, currentParallaxY, currentFog, fogRgb, 0.71, 2.0, W, H);
+    // 3. 플레이어 레이어 풀 (1.0) - 땅보다 먼저 그려서 뒤로 숨김
+    if (GRAPHICS.showGrass) {
+        // 맨 뒤에 1.0을 넣어서 플레이어 풀만 그립니다.
+        renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W, globalRenderTime, biomeMgr, 1.0);
+    }
 
     // 8. [바닥] 플레이어가 밟는 땅 (Depth: 1.0)
-    renderLand(ctx, landscapes[3], 3, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours);
-    
-    if (GRAPHICS.showGrass) {
-        // 인자: ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W
-        renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W); 
-    }
+    renderLand(ctx, landscapes[3], 3, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr);
+
     renderWeatherLayer(0.7, 1.0);
     
     // -------------------------------------------------------------------
@@ -2490,13 +2338,28 @@ function render() {
         player.x += player.vx * dtFactor;
         player.y += player.vy * dtFactor;
 
+        // ★ [수정됨] 이동 제한 구역 (절벽 앞에서 멈춤)
+        // geography.js의 EDGE_BUFFER(3500) 값과 맞춰야 함
+        const EDGE_LIMIT = 5000; 
+        
+        if (player.x < EDGE_LIMIT) {
+            player.x = EDGE_LIMIT; 
+            player.vx = 0; // 벽에 박으면 속도 0
+        }
+        if (player.x > WORLD_WIDTH - EDGE_LIMIT) {
+            player.x = WORLD_WIDTH - EDGE_LIMIT;
+            player.vx = 0;
+        }
+
         // 지형 판정 (기존 유지)
-        if (player.x < 30) player.x = 30; 
-        if (player.x > WORLD_WIDTH - 30) player.x = WORLD_WIDTH - 30;
         const currentGroundY = getGroundY(player.x);
         if (player.y >= currentGroundY) {
-            player.y = currentGroundY; player.vy = 0; player.isGrounded = true;
-        } else { player.isGrounded = false; }
+            player.y = currentGroundY; 
+            player.vy = 0; 
+            player.isGrounded = true;
+        } else { 
+            player.isGrounded = false; 
+        }
 
     } else {
         // --- [4. 사망 및 부활 로직: 기존 코드 그대로 유지] ---
@@ -2848,49 +2711,97 @@ function render() {
     
     ctx.restore();
 
-    // 5. 잡몹(Critters) 로직 및 렌더링
-    if (globalRenderTime % 180 === 0 && critters.length < 12 && Math.random() < 0.6) {
+    // 몬스터 스폰 로직 (기존 if문을 이걸로 교체)
+    if (globalRenderTime % 120 === 0) {
         let weatherId = currentWeather.id;
         let cData = CRITTER_DB[weatherId] || CRITTER_DB["clear"];
+        let spawnChance = critters.length < 3 ? 1.0 : 0.1;
         
-        let dir = Math.random() < 0.5 ? 1 : -1;
-        let rDist = CRITTER_MIN_SPAWN_DIST + Math.random() * (CRITTER_MAX_SPAWN_DIST - CRITTER_MIN_SPAWN_DIST);
-        let startX = Math.max(30, Math.min(player.x + (dir * rDist), WORLD_WIDTH - 30));
+        if (cData && critters.length < 12 && Math.random() < spawnChance) {
+            let dir = Math.random() < 0.5 ? 1 : -1;
+            // ★ 테스트를 위해 거리를 500~800으로 좁힘 (너무 멀면 안 보임)
+            let rDist = 1500 + Math.random() * 500; 
+            let startX = player.x + (dir * rDist);
 
-        // 몬스터 스폰 시점 (critters.push 하는 곳을 찾으세요)
-        critters.push({
-            id: Date.now() + Math.random(), // ★ [추가] 몬스터마다 고유 번호 부여
-            x: startX, 
-            y: getGroundY(startX), 
-            vx: (Math.random() - 0.5) * cData.speed,
-            typeData: cData, 
-            hp: cData.hp, 
-            maxHp: cData.hp, 
-            hitTime: 10, // ★ 태어나자마자 10프레임 동안은 무적 (스폰킬 방지)
-            life: 1800, 
-            animTime: Math.random() * 100
-        });
+            // 월드 경계 체크
+            startX = Math.max(1000, Math.min(startX, WORLD_WIDTH - 1000));
+
+            const newMob = {
+                id: Date.now() + Math.random(),
+                x: startX, 
+                y: getGroundY(startX), 
+                vx: 0,
+                vy: 0,
+                targetVx: 0,
+                typeData: cData, 
+                hp: cData.hp, 
+                maxHp: cData.hp, 
+                hitTime: 0, 
+                life: 3600, 
+                animTime: Math.random() * 100,
+                state: "idle",
+                spawnTimer: 0 // mobBehavior.js에서 사용하는 초기화 변수
+            };
+
+            critters.push(newMob);
+        }
     }
 
     for (let i = critters.length - 1; i >= 0; i--) {
         let c = critters[i];
-        c.life--; c.animTime += 0.1;
+        
+        // 1. 기본 상태 업데이트 (수명, 애니메이션 시간, 무적 시간)
+        c.life--; 
+        c.animTime += 0.1;
         if (c.hitTime > 0) c.hitTime--;
 
-        // AI 이동
-        if (Math.random() < 0.01) c.vx = (Math.random() - 0.5) * c.typeData.speed; 
-        // 대시 로직: 너무 자주 튀어 나가지 않도록 확률 조정 및 배율 조정
-        if (c.typeData.moveType === "dash" && Math.random() < 0.015) {
-            // 한 방향으로 훅 끼어드는 느낌만 줌 (배율 1.5 -> 1.25)
-            c.vx *= 1.8; 
+        // ========================================================
+        // ★ [핵심 변경] AI 판단 -> 물리 적용 (Logic 분리 완료)
+        // ========================================================
+        
+        // (1) 두뇌 가동: "어디로 갈까?" 결정 (targetVx 설정)
+        // 플레이어 위치를 보고 쫓을지, 도망갈지, 멍때릴지 정합니다.
+        updateMobAI(c, player); 
+
+        // (2) 몸 가동: "어떻게 움직일까?" 실행 
+        // (실제 x, y 좌표 이동, 중력, 지형 충돌, 맵 밖 이탈 방지가 여기서 처리됨)
+        applyMobMovement(c, dt); 
+        // ★ 여기 추가: 플레이어 피격 판정 (몸박)
+        if (!player.isDead && player.invincibleTime <= 0 && c.hp > 0) {
+            let dist = Math.abs(player.x - c.x);
+            let distY = Math.abs((player.y - 50) - c.y); // 플레이어 가슴 위치 기준
+            
+            // 거리가 가로 35, 세로 65 이내면 충돌
+            if (dist < 35 && distY < 65) {
+                let dmg = c.typeData.damage || 10;
+                takeDamage(dmg); 
+
+                // 충돌 시 플레이어를 넉백(뒤로 밀치기) 시킴
+                player.vx = (player.x < c.x) ? -10 : 10;
+                player.vy = -4; // 살짝 위로 띄움
+            }
         }
-        if (c.typeData.moveType === "glitch" && Math.random() < 0.1) c.x += (Math.random()-0.5)*100; 
-        c.x = Math.max(30, Math.min(c.x + c.vx, WORLD_WIDTH - 30));
 
-        let gY = getGroundY(c.x);
-        c.y = c.typeData.moveType === "float" ? c.y + (gY - 50 - c.y) * 0.05 + Math.sin(c.animTime)*0.5 : gY;
+        // 그리기 로직
+        if (c.x > cameraX - 200 && c.x < cameraX + W + 200) { // 화면 근처에 있을 때만
+            ctx.save();
+            ctx.translate(-cameraX, -currentParallaxY * 50);
+            let bounce = (c.typeData.moveType === "hop") ? Math.abs(Math.sin(c.animTime)) * 10 : 0;
+            ctx.translate(c.x, c.y - bounce); // 월드 좌표 기준으로 이동
 
-        // [추가됨] 플레이어와 몬스터 충돌 (몸박) 감지
+            if (c.vx < 0) ctx.scale(-1, 1);
+            drawCritter(ctx, c, globalRenderTime); // 그리기 실행
+            ctx.restore();
+        }
+
+        // (3) 둥둥 떠다니는 몹(float)을 위한 시각적 바운스 추가
+        // 물리 엔진은 위치만 잡아주므로, 둥실거리는 느낌은 여기서 살짝 더해줍니다.
+        if (c.typeData.moveType === "float") {
+             c.y += Math.sin(c.animTime) * 0.5;
+        }
+        // ========================================================
+
+        // 2. 플레이어와 몬스터 충돌 (몸박) 감지
         if (player.invincibleTime <= 0 && c.hp > 0) {
             // x축 거리와 y축 거리(플레이어 키 고려) 계산
             let dist = Math.abs(player.x - c.x);
@@ -2907,7 +2818,11 @@ function render() {
             }
         }
 
-        if (c.life <= 0) { critters.splice(i, 1); continue; }
+        // 3. 수명이 다하면 제거 (화면 밖으로 너무 멀어져도 제거하는 로직은 applyMobMovement 내부나 여기서 추가 가능)
+        if (c.life <= 0) { 
+            critters.splice(i, 1); 
+            continue; 
+        }
 
         // [관통 시스템 적용] 투사체 충돌 판정 및 처리 루프
     for (let j = projectiles.length - 1; j >= 0; j--) {
@@ -2954,6 +2869,8 @@ function render() {
             }
 
             if (isHit) {
+                // 1. [에러 해결] 현재 장착 중인 오라 정보 가져오기
+                const aura = allAuras.find(a => a.name === equippedAuraName);
                 // 1. 데미지 계산을 '먼저' 해야 합니다! (ReferenceError 방지)
                 let baseDamage = (p.rarity || 1) / 10;
                 if(p.type === 1) baseDamage *= 0.3;
@@ -3001,6 +2918,8 @@ function render() {
                             customColor: "#00E5FF"
                         });
                     }
+                    const shardColor = aura ? aura.color : "#FFD700"; 
+                    spawnRewardShards(c.x, c.y, shardColor, 10);
                     c.shouldRemove = true; 
                 }
 
@@ -3050,7 +2969,7 @@ function render() {
 
             // 3. 몬스터 본체
             if (c.vx < 0) ctx.scale(-1, 1);
-            drawCritterSprite(ctx, c); // 본체 그림
+            drawCritter(ctx, c, globalRenderTime);
             ctx.restore();
             
             c.screenX = c.x - cameraX; 
@@ -3065,6 +2984,54 @@ function render() {
     renderLightning(ctx);
     renderSpawns(ctx);
     vfxParticles.updateAndDraw(ctx); 
+
+    // ==========================================
+    // ★ 조각 연출 업데이트 및 렌더링
+    // ==========================================
+    ctx.save();
+    // 월드 좌표계 적용 (카메라 보정)
+    ctx.translate(-cameraX, -currentParallaxY * 50);
+
+    for (let i = rewardShards.length - 1; i >= 0; i--) {
+        let s = rewardShards[i];
+
+        // 1. 유도탄 로직: 캐릭터 방향 벡터 계산
+        let dx = player.x - s.x;
+        let dy = (player.y - 50) - s.y; // 캐릭터 가슴팍으로 유도
+        let dist = Math.hypot(dx, dy);
+
+        // 2. 물리 엔진: 처음엔 폭발했다가 점점 캐릭터에게 가속
+        if (dist > 20) {
+            s.vx += (dx / dist) * 1.5; // 캐릭터 방향 가속도
+            s.vy += (dy / dist) * 1.5;
+            s.vx *= 0.92; // 마찰력 (부드러운 커브)
+            s.vy *= 0.92;
+        }
+
+        s.x += s.vx;
+        s.y += s.vy;
+
+        // 3. 조각 그리기 (빛나는 다이아몬드 형태)
+        ctx.globalAlpha = s.life;
+        ctx.fillStyle = s.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = s.color;
+        
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - 4);
+        ctx.lineTo(s.x + 4, s.y);
+        ctx.lineTo(s.x, s.y + 4);
+        ctx.lineTo(s.x - 4, s.y);
+        ctx.fill();
+
+        // 4. 캐릭터와 충돌 시 제거 (흡수 완료)
+        if (dist < 30) {
+            rewardShards.splice(i, 1);
+            // 여기서 짤랑! 하는 사운드 하나 넣어주면 최고입니다.
+            // playSound('collect'); 
+        }
+    }
+    ctx.restore();
 
     // ★ [신규] 데미지 텍스트 렌더링 (메이플 스타일)
     for (let i = damageLabels.length - 1; i >= 0; i--) {
@@ -3138,10 +3105,12 @@ function render() {
         nickname: myNickname 
     });
 
-    // 60프레임 중 5프레임 정도마다 UI 갱신 (약 0.1초마다)
-    if (globalRenderTime % 3 === 0) {
-        calcBuffs(); 
+    if (globalRenderTime % 10 === 0) {
+        biomeMgr.update(player.x); 
     }
+
+    biomeMgr.update(player.x); 
+
     requestAnimationFrame(render); 
 }
 render();
@@ -3253,6 +3222,26 @@ function applyAuraStyle(aura) {
     document.getElementById("aura-text").style.color = aura.color;
     document.getElementById("aura-text").style.textShadow = aura.glow;
     document.getElementById("odds-text").textContent = `1 in ${aura.chanceX.toLocaleString()}`;
+}
+
+function spawnRewardShards(startX, startY, color, count = 10) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        // 🔹 속도 하향: 5~15에서 2~7 정도로 조절
+        const speed = 2 + Math.random(1, 2) * 3; 
+        
+        rewardShards.push({
+            x: startX,
+            y: startY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed, // 위로 튀는 힘도 살짝 하향
+            color: color,
+            // 🔹 크기 추가: 6~10픽셀 사이의 랜덤한 크기
+            size: 6 + Math.random() * 4, 
+            life: 1.0,
+            target: player
+        });
+    }
 }
 
 // ========================================================
@@ -3512,7 +3501,7 @@ function startRoll() {
 }
 
 window.onload = () => {
-    console.log("🚀 Main.js 로드 완료 & window.onload 실행");
+    resetBrowserZoom(); // ★ 일단 100%로 맞추고 시작
 
     // 1. 스타트 버튼 연결 (가장 중요)
     const startBtn = document.getElementById("start-btn");
@@ -3524,7 +3513,6 @@ window.onload = () => {
         startBtn.parentNode.replaceChild(newBtn, startBtn);
 
         newBtn.addEventListener("click", () => {
-            console.log("🖱️ 버튼 클릭됨!");
 
             // (1) 오디오 재생
             try {
@@ -3548,14 +3536,12 @@ window.onload = () => {
             // (4) 리사이즈
             setTimeout(() => { if(typeof forceResize === 'function') forceResize(); }, 100);
         });
-        console.log("✅ 시작 버튼 이벤트 연결 성공");
     } else {
         console.error("❌ start-btn을 찾을 수 없습니다.");
     }
 
     // 2. 모바일 환경 설정
     if (IS_MOBILE) {
-        console.log("📱 모바일 환경 감지됨");
         GRAPHICS.weatherDensity = 0.2;      
         GRAPHICS.showGrass = false;        
         GRAPHICS.showClouds = false;       
@@ -3610,7 +3596,6 @@ window.addEventListener("beforeunload", () => {
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'hidden') {
         saveGame();
-        console.log("💾 App Hidden: Force Saved");
     }
 });
 
@@ -3640,3 +3625,47 @@ window.openNicknameEdit = openNicknameEdit;
 window.updateSkipThreshold = handleUpdateSkip;
 window.updateAutoThresholds = handleUpdateAuto;
 window.updateGraphicSetting = updateGraphicSetting;
+
+// ========================================================
+// ★ [줌 차단] 브라우저 기본 확대/축소 막기
+// ========================================================
+
+// 1. [Ctrl + 휠] 차단
+window.addEventListener('wheel', function(e) {
+    if (e.ctrlKey) {
+        e.preventDefault(); // 줌 동작 취소
+    }
+}, { passive: false }); // passive: false가 있어야 preventDefault가 먹힘
+
+// 2. [Ctrl + +/-] 키보드 단축키 차단
+window.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && (
+        e.key === '+' || 
+        e.key === '-' || 
+        e.key === '=' || 
+        e.key === '_' || 
+        e.key === '0'
+    )) {
+        e.preventDefault();
+    }
+});
+
+// 3. [모바일] 핀치 줌(손가락 두개로 확대) 차단
+document.addEventListener('gesturestart', function(e) {
+    e.preventDefault();
+});
+
+// [디버그용] 콘솔에 setWeather("thunder") 입력하면 즉시 날씨 변경
+window.setWeather = function(weatherId) {
+    // weathers 배열에서 ID가 일치하는 날씨 데이터 찾기
+    const targetWeather = weathers.find(w => w.id === weatherId);
+
+    if (targetWeather) {
+        // 기존에 만들어둔 날씨 적용 함수 호출
+        applyNewWeather(targetWeather);
+        console.log(`☁️ 날씨가 [${targetWeather.name}]으로 강제 변경되었습니다.`);
+    } else {
+        console.error(`❌ 존재하지 않는 날씨 ID입니다: ${weatherId}`);
+        console.log("사용 가능한 ID 목록:", weathers.map(w => w.id).join(", "));
+    }
+};

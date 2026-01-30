@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
     <title>웹 RNG 시뮬레이터: Ultimate Gimmick Update</title>
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
@@ -695,6 +695,104 @@
             #top-right-group { width: 100%; align-items: center; }
             #profile-card { min-width: 150px; padding: 8px; }
         }
+
+        /* 1. 실크송 스타일 (중앙 타이틀 - 초대형) */
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
+
+        #biome-center-overlay {
+            position: fixed;
+            top: 35%; /* 화면 약간 위쪽 */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 10000;
+            opacity: 0;
+            width: 100%; /* 가로 꽉 차게 */
+        }
+
+        #biome-center-overlay.active {
+            animation: silkReveal 4.5s ease-in-out forwards;
+        }
+
+        .silk-title {
+            font-family: 'Cinzel', serif;
+            font-size: 110px; /* ★ 기존 60px -> 110px (초대형) */
+            color: white;
+            font-weight: 800; /* 더 두껍게 */
+            letter-spacing: 15px; /* 자간 넓게 벌려서 웅장함 추가 */
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.6), 0 0 10px rgba(0,0,0,0.5);
+            margin-bottom: 15px;
+            line-height: 1.1;
+            white-space: nowrap; /* 줄바꿈 방지 */
+        }
+
+        .silk-subtitle {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 24px; /* ★ 기존 16px -> 24px */
+            color: #ddd;
+            letter-spacing: 12px;
+            text-transform: uppercase;
+            border-top: 2px solid rgba(255, 255, 255, 0.8); /* 선도 두껍게 */
+            display: inline-block;
+            padding-top: 10px;
+            padding-left: 12px; /* 자간 때문에 중심 맞추기용 */
+            font-weight: 300;
+        }
+
+        /* 애니메이션: 천천히 떠오르며 등장 */
+        @keyframes silkReveal {
+            0% { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+            15% { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+            85% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+            100% { opacity: 0; transform: translate(-50%, -60%) scale(1.1); }
+        }
+
+        /* 2. 재방문 알림 (왼쪽 하단 - 대형) */
+        #biome-side-toast {
+            position: fixed;
+            bottom: 140px; /* 채팅바보다 더 위로 */
+            left: 30px;
+            color: white;
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 32px; /* ★ 기존 18px -> 32px (확 키움) */
+            font-weight: 700; /* 굵게 */
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+            transform: translateX(-20px); /* 등장 전 왼쪽으로 숨김 */
+            z-index: 9000;
+            
+            /* 디자인 요소 강화 */
+            border-left: 6px solid white; /* 굵은 흰색 바 */
+            padding-left: 20px;
+            background: linear-gradient(to right, rgba(0,0,0,0.7), transparent); /* 배경 깔아서 가독성 확보 */
+            padding-top: 5px;
+            padding-bottom: 5px;
+            border-top-right-radius: 50px;
+            border-bottom-right-radius: 50px;
+        }
+
+        #biome-side-toast.show {
+            opacity: 1;
+            transform: translateX(0); /* 스르륵 나옴 */
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000; /* 레터박스(빈공간)는 검은색 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh; /* 화면 꽉 채우기 */
+        }
+
+        #game-canvas, #vfx-canvas {
+            position: absolute;
+            /* 크기는 JS에서 제어하므로 여기서는 위치만 잡음 */
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); /* 게임 화면 돋보이게 그림자 */
+        }
     </style>
     <script>
     // !function() { function detectDevTool(allow) { if(isNaN(+allow)) allow = 100; var start = +new Date(); debugger; var end = +new Date(); if(isNaN(start) || isNaN(end) || end - start > allow) { document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s" } } if(window.attachEvent) { if (document.readyState === "complete" || document.readyState === "interactive") { detectDevTool(); window.attachEvent('onresize', detectDevTool); window.attachEvent('onmousemove', detectDevTool); window.attachEvent('onfocus', detectDevTool); window.attachEvent('onblur', detectDevTool); } else { setTimeout(argument.callee, 0); } } else { window.addEventListener('load', detectDevTool); window.addEventListener('resize', detectDevTool); window.addEventListener('mousemove', detectDevTool); window.addEventListener('focus', detectDevTool); window.addEventListener('blur', detectDevTool); } }();
@@ -940,6 +1038,12 @@
         <div id="death-penalty-msg" style="margin-top: 20px; text-align: center; color: #aaa; font-size: 0.9rem;">
             </div>
     </div>
+    <div id="biome-center-overlay">
+        <div class="silk-title" id="silk-title-text">평원 지대</div>
+        <div class="silk-subtitle">DISCOVERED</div>
+    </div>
+
+    <div id="biome-side-toast">평원 지대</div>
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

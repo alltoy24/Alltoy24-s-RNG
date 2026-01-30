@@ -1,420 +1,555 @@
 import { lerp, hexToRgb } from '../utils.js';
-import { GRAPHICS } from '../settings.js';
+import { BIOME_DATA } from '../data/biomes.js';
+import { calculateGroundY } from '../logic/geography.js';
+import { consumableDB } from '../data/items.js';
 
-export let landscapes = [], trees = [], grassBlades = [], stars = [], clouds = [], ruins = []; // 배열 미리 선언
+// 기존 배열(로직용) + ★ 그리드 맵(렌더링용) 추가
+export let landscapes = [], trees = [], grassBlades = [], stars = [], clouds = [], ruins = [], fences = [], activeSpawns = [];
+let treeGrid = {}, grassGrid = {}, fenceGrid = {}; // 최적화용 공간 분할 맵
+const GRID_SIZE = 2500; // 2500px 단위로 구역을 나눔
 
-const skyKeyframes = [ 
-    { h: 0, top: [2, 1, 17], bot: [25, 22, 84], sun: [255, 255, 255] }, 
-    { h: 5, top: [32, 28, 41], bot: [61, 48, 86], sun: [255, 255, 255] }, 
-    { h: 6, top: [75, 56, 76], bot: [253, 94, 83], sun: [255, 87, 34] }, 
-    { h: 8, top: [135, 206, 235], bot: [224, 246, 255], sun: [255, 215, 0] }, 
-    { h: 12, top: [0, 180, 219], bot: [0, 131, 176], sun: [255, 255, 204] }, 
-    { h: 16, top: [135, 206, 235], bot: [224, 246, 255], sun: [255, 215, 0] }, 
-    { h: 18, top: [253, 94, 83], bot: [75, 56, 76], sun: [255, 69, 0] }, 
-    { h: 19, top: [32, 28, 41], bot: [61, 48, 86], sun: [255, 255, 255] }, 
-    { h: 24, top: [2, 1, 17], bot: [25, 22, 84], sun: [255, 255, 255] } 
-];
-
-export function getCurrentSkyColors(preciseHour, currentWeather) { 
-    // ★ [기믹 4] 글리치 날씨 전용 기괴한 하늘색
-    if(currentWeather.id === "glitch") return { top: [0, 0, 0], bot: [139, 0, 139], sun: [255, 0, 255] };
-    if(currentWeather.id === "eclipse") return { top: [15, 5, 10], bot: [40, 15, 20], sun: [255, 120, 50] };
-    if(currentWeather.id === "blood-moon") return { top: [35, 0, 0], bot: [80, 10, 10], sun: [255, 0, 0] };
-    if(currentWeather.id === "thunder") return { top: [17, 17, 21], bot: [27, 39, 53], sun: [255, 255, 255] };
-    if(currentWeather.id === "cloudy" || currentWeather.id === "foggy") return { top: [84, 110, 122], bot: [176, 190, 197], sun: [255, 255, 255] };
-
-    let prev = skyKeyframes[0], next = skyKeyframes[skyKeyframes.length - 1]; 
-    for (let i = 0; i < skyKeyframes.length - 1; i++) { 
-        if (preciseHour >= skyKeyframes[i].h && preciseHour <= skyKeyframes[i+1].h) { prev = skyKeyframes[i]; next = skyKeyframes[i+1]; break; } 
-    } 
-    let factor = (preciseHour - prev.h) / (next.h - prev.h); 
-    
-    let top = [Math.round(lerp(prev.top[0], next.top[0], factor)), Math.round(lerp(prev.top[1], next.top[1], factor)), Math.round(lerp(prev.top[2], next.top[2], factor))]; 
-    let bot = [Math.round(lerp(prev.bot[0], next.bot[0], factor)), Math.round(lerp(prev.bot[1], next.bot[1], factor)), Math.round(lerp(prev.bot[2], next.bot[2], factor))]; 
-    let sun = [Math.round(lerp(prev.sun[0], next.sun[0], factor)), Math.round(lerp(prev.sun[1], next.sun[1], factor)), Math.round(lerp(prev.sun[2], next.sun[2], factor))]; 
-    return { top, bot, sun }; 
+// [1] 환경 분석 (패럴랙스 보정)
+function getBiomeAt(x, depth = 1.0) {
+    const worldX = x / (depth || 0.001); 
+    for (const key in BIOME_DATA) {
+        const [start, end] = BIOME_DATA[key].range;
+        if (worldX >= start && worldX < end) return key;
+    }
+    return "PLAINS";
 }
 
-// ★ [최적화] 배경 생성 함수 (모바일은 개수 대폭 감소)
-export function generateNature(canvas, vfxCanvas, W, H, WORLD_WIDTH) { 
-    W = window.innerWidth; 
-    H = window.innerHeight; 
-    canvas.width = W; 
-    canvas.height = H; 
-    vfxCanvas.width = W; 
-    vfxCanvas.height = H;
-    
-    landscapes = []; trees = []; grassBlades = []; stars = []; clouds = []; ruins = []; 
-    const extW = WORLD_WIDTH + W;
-    const offsetX = -W;
+function getLocalEnvironment(x, depth = 1.0) {
+    const worldX = x / (depth || 0.001); 
+    const blendDist = 2000;
+    let r = 0, g = 0, b = 0;
+    let desertFactor = 0;
+    let totalWeight = 0;
 
-    // 1. 모바일 감지 및 밀도 설정
-    // 모바일이면 0.3 (30%), PC면 1.0 (100%)
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const density = isMobile ? 0.3 : 1.0; 
-
-    // 2. 별 생성 (개수 조절: 600개 -> 모바일은 약 180개)
-    for (let i = 0; i < 600 * density; i++) {
-        stars.push({ 
-            x: Math.random() * extW, 
-            y: Math.random() * H, 
-            size: Math.random() * 2, 
-            alpha: Math.random() 
-        }); 
-    }
-
-    // 3. 구름 생성 (개수 조절: 40개 -> 모바일은 약 12개)
-    for(let i=0; i < 40 * density; i++) {
-        clouds.push({
-            x: Math.random() * extW, 
-            y: Math.random() * H * 0.4, 
-            size: Math.random() * 60 + 40, 
-            speed: Math.random() * 0.5 + 0.1 
-        });
-    }
-
-    // 4. 유적(Ruins) 생성 (개수 조절)
-    // 원경 유적
-    for(let i=0; i < 8 * density; i++) {
-        ruins.push({ x: (Math.random() * extW) - (W * 0.5), y: H * 0.95, w: Math.random() * 50 + 70, h: Math.random() * 300 + 400, type: "pillar", depth: Math.random() * 0.05 + 0.1, tone: -30, isTall: Math.random() < 0.8 });
-    }
-    // 중경 유적
-    for(let i=0; i < 12 * density; i++) {
-        let isArch = Math.random() < 0.4;
-        ruins.push({ x: (Math.random() * extW) - (W * 0.5), y: H * 1.05, w: isArch ? (Math.random() * 90 + 90) : (Math.random() * 50 + 50), h: Math.random() * 400 + 400, type: isArch ? "arch" : "pillar", depth: Math.random() * 0.1 + 0.25, tone: -10, isTall: Math.random() < 0.4 });
-    }
-    // 근경 유적
-    for(let i=0; i < 10 * density; i++) {
-        let isArch = Math.random() < 0.3;
-        ruins.push({ x: (Math.random() * extW) - (W * 0.5), y: H * 1.15, w: isArch ? (Math.random() * 110 + 100) : (Math.random() * 70 + 60), h: Math.random() * 500 + 500, type: isArch ? "arch" : "pillar", depth: Math.random() * 0.2 + 0.5, tone: 10, isTall: Math.random() < 0.2 });
-    }
-
-    // 5. 지형 및 나무/풀 생성
-    
-    // (1) 먼 뒷산
-    let mountainsBack = { color: [40, 45, 60], points: [], depth: 0.15, baseFog: 0.8 }; 
-    for (let x = offsetX; x <= extW; x += 40) { 
-        let y = H * 0.4 - Math.sin(x * 0.002) * 150 - Math.cos(x * 0.005) * 50; 
-        mountainsBack.points.push({ x: x, y: y }); 
-    } 
-    landscapes.push(mountainsBack); 
-
-    // (2) 앞산
-    let mountainsFront = { color: [30, 35, 50], points: [], depth: 0.35, baseFog: 0.6 }; 
-    for (let x = offsetX; x <= extW; x += 35) { 
-        let y = H * 0.55 - Math.cos(x * 0.004) * 100 + Math.sin(x * 0.01) * 30; 
-        mountainsFront.points.push({ x: x, y: y }); 
-    } 
-    landscapes.push(mountainsFront); 
-
-    // (3) 언덕 및 나무
-    let plains = { color: [25, 50, 30], points: [], depth: 0.7, baseFog: 0.3 }; 
-    for (let x = offsetX; x <= extW; x += 30) { 
-        let y = H * 0.7 + Math.sin(x * 0.003) * 50; 
-        plains.points.push({ x: x, y: y }); 
-        
-        // ★ [나무 생성 확률 조절]
-        // 기존 0.2(20%) -> 모바일은 0.06(6%)로 감소
-        if (Math.random() < 0.2 * density) {
-            trees.push({ id: trees.length, layer: 2, baseX: x, baseY: y, size: Math.random() * 0.6 + 0.9, type: Math.floor(Math.random()*3) }); 
+    for (const key in BIOME_DATA) {
+        const data = BIOME_DATA[key];
+        const [start, end] = data.range;
+        if (worldX >= start - blendDist && worldX <= end + blendDist) {
+            let dist = 0;
+            if (worldX < start) dist = start - worldX;
+            else if (worldX > end) dist = worldX - end;
+            let weight = 1.0 - (dist / blendDist);
+            if (weight > 0) {
+                weight = (1 - Math.cos(weight * Math.PI)) / 2;
+                const c = hexToRgb(data.ground);
+                r += c[0]*weight; g += c[1]*weight; b += c[2]*weight;
+                if (key === "DESERT") desertFactor += weight;
+                totalWeight += weight;
+            }
         }
-    } 
-    landscapes.push(plains); 
+    }
+    if (totalWeight > 0) { r/=totalWeight; g/=totalWeight; b/=totalWeight; }
+    else { const d = hexToRgb(BIOME_DATA.PLAINS.ground); r=d[0]; g=d[1]; b=d[2]; }
+    return { color: [r, g, b], desertFactor: Math.min(1, desertFactor) };
+}
 
-    // (4) 바닥(플레이어 땅) 및 풀
-    let hills = { color: [20, 40, 25], points: [], depth: 1.0, baseFog: 0.1 }; 
-    for (let x = offsetX; x <= extW; x += 25) { 
-        // 평탄화된 지형 공식
-        let baseY = H * 0.82;
-        let wave1 = Math.cos(x * 0.0007) * 12;
-        let wave2 = Math.sin(x * 0.003) * 5;
-        let wave3 = Math.cos(x * 0.01) * 2;
-        let y = baseY + wave1 + wave2 + wave3;
-        hills.points.push({ x: x, y: y }); 
+// [2] 하늘색
+export function getCurrentSkyColors(h, w) {
+    if (w.id === "glitch") return { top: [0,0,0], bot: [45,0,90], sun: [0,255,255] };
+    if (w.id === "blood-moon") return { top: [20,0,0], bot: [100,0,0], sun: [255,0,0] };
+    if (w.id === "thunder") return { top: [10,10,25], bot: [40,45,70], sun: [200,220,255] };
+    if (w.id === "rain") return { top: [30,40,50], bot: [80,90,110], sun: [180,180,180] };
+    const isNight = (h < 6 || h > 18);
+    return isNight ? { top: [5,5,20], bot: [20,20,50], sun: [255,255,255] } : { top: [100,180,255], bot: [190,230,255], sun: [255,255,200] };
+}
 
-        // ★ [풀 생성 확률 조절]
-        // 기존 0.9(90%) -> 모바일은 0.27(27%)로 감소
-        if (Math.random() < 0.9 * density) {
-            // 한 번에 심는 개수도 8개에서 모바일은 줄임 (밀도 반영)
-            let count = isMobile ? 3 : 8; 
-            for (let g = 0; g < count; g++) {
-                grassBlades.push({ 
-                    id: grassBlades.length, 
-                    baseX: x + Math.random() * 20, 
-                    baseY: y + Math.random() * 10, 
-                    h: Math.random() * 20 + 15, 
-                    swayOffset: Math.random() * 100 
+export function getGroundY(x, depth=1.0) { return calculateGroundY(x, window.innerHeight, depth); }
+
+// ==========================================================================================
+// [GENERATION] 월드 생성 (그리드 등록 최적화)
+// ==========================================================================================
+export function generateNature(canvas, vfxCanvas, W, H, WORLD_WIDTH) { 
+    W = window.innerWidth; H = window.innerHeight; 
+    canvas.width = W; canvas.height = H; vfxCanvas.width = W; vfxCanvas.height = H;
+    
+    // 데이터 초기화
+    landscapes=[]; trees=[]; grassBlades=[]; stars=[]; clouds=[]; ruins=[]; fences=[]; activeSpawns=[];
+    // ★ 그리드 초기화
+    treeGrid = {}; grassGrid = {}; fenceGrid = {};
+
+    const density = (/Android|iPhone/i.test(navigator.userAgent)) ? 0.4 : 1.2; 
+
+    // 하늘
+    for (let i=0; i<2000; i++) stars.push({x:Math.random()*WORLD_WIDTH, y:Math.random()*H*0.8, size:Math.random()*2+0.5, alpha:Math.random()});
+    for (let i=0; i<150; i++) clouds.push({x:Math.random()*WORLD_WIDTH, y:Math.random()*H*0.4, size:Math.random()*120+80, speed:Math.random()*0.6+0.2});
+
+    const layers = [
+        { color: [40,45,60], depth: 0.15, step: 250, treeProb: 0.04 },
+        { color: [30,35,50], depth: 0.35, step: 180, treeProb: 0.10 },
+        { color: [25,50,40], depth: 0.70, step: 100, treeProb: 0.15 },
+        { color: [20,40,25], depth: 1.0,  step: 60,  treeProb: 0.20 } 
+    ];
+
+    layers.forEach(l => {
+        let pts=[]; for(let x=-W; x<=WORLD_WIDTH+W; x+=l.step) pts.push({x, y:calculateGroundY(x, H, l.depth)});
+        landscapes.push({color:l.color, points:pts, depth:l.depth});
+
+        const spawnStep = 60; 
+        for(let x=0; x<WORLD_WIDTH; x+=spawnStep/density) {
+            
+            const env = getLocalEnvironment(x, l.depth);
+            const biome = getBiomeAt(x, l.depth);
+
+            // 유적
+            if (l.depth < 0.8 && Math.random() < 0.01) {
+                ruins.push({x, y:0, w:Math.random()*60+80, h:Math.random()*400+600, type:Math.random()<0.4?"arch":"pillar", depth:l.depth, tone:Math.random()*30-15, isTall:Math.random()<0.7});
+            }
+
+            // 울타리
+            if (l.depth === 1.0 && biome === "PLAINS" && Math.random() < 0.02) {
+                const count = 3 + Math.floor(Math.random() * 3);
+                for (let k=0; k<count; k++) {
+                    const fence = {x: x + k*40, depth: l.depth, seed: Math.random()};
+                    fences.push(fence);
+                    // ★ 그리드 등록
+                    const gridKey = Math.floor(fence.x / GRID_SIZE);
+                    if(!fenceGrid[gridKey]) fenceGrid[gridKey] = [];
+                    fenceGrid[gridKey].push(fence);
+                }
+                x += count * 40; continue; 
+            }
+
+            // 나무
+            let chance = l.treeProb * (1.0 - env.desertFactor);
+            if(biome==="MAGIC_FOREST") chance*=1.2;
+            let isCactus = false, isGiant = false;
+
+            if(env.desertFactor > 0.6) { chance = 0.04 * env.desertFactor; isCactus = true; } 
+            else { if(l.depth >= 0.7 && Math.random() < 0.003) { isGiant = true; chance = 1.0; } }
+
+            if(Math.random() < chance) {
+                let sizeMult = (Math.random()*0.5 + 0.8);
+                if (isGiant) sizeMult = 3.5 + Math.random();
+
+                const t = {
+                    id: trees.length, baseX: x + (Math.random()-0.5)*40,
+                    size: sizeMult * (l.depth*0.6+0.4), 
+                    biome: biome, layerDepth: l.depth, 
+                    seed: Math.random()*99999,
+                    isCactus: isCactus, isGiant: isGiant
+                };
+                trees.push(t);
+                if(isGiant) x += 400; 
+
+                // ★ 그리드 등록 (baseX 기준)
+                const gridKey = Math.floor(t.baseX / GRID_SIZE);
+                if(!treeGrid[gridKey]) treeGrid[gridKey] = [];
+                treeGrid[gridKey].push(t);
+            }
+
+            // 풀
+            if(l.depth>=0.7 && env.desertFactor < 0.8) {
+                const dens = (biome==="PLAINS"||biome==="MAGIC_FOREST") ? 10 : 3;
+                const adjDens = dens * (1.0 - env.desertFactor);
+                for(let j=0; j<adjDens*density; j++) {
+                    const g = {
+                        id:grassBlades.length, baseX:x+Math.random()*spawnStep,
+                        h:Math.random()*15+10, w:Math.random()*2+1.5,
+                        swayOffset:Math.random()*Math.PI*2, layerDepth:l.depth,
+                        isFlower: (biome==="PLAINS"||biome==="MAGIC_FOREST") && Math.random()<0.10,
+                        flowerColor: Math.random()
+                    };
+                    grassBlades.push(g);
+                    
+                    // ★ 그리드 등록 (가장 중요: 개체수가 많으므로 필수)
+                    const gridKey = Math.floor(g.baseX / GRID_SIZE);
+                    if(!grassGrid[gridKey]) grassGrid[gridKey] = [];
+                    grassGrid[gridKey].push(g);
+                }
+            }
+            
+            // 회전초 (회전초는 움직이므로 그리드 제외하고 그냥 리스트 순회 - 개체수가 적음)
+            if(env.desertFactor > 0.7 && l.depth===1.0 && Math.random()<0.02) {
+                grassBlades.push({
+                    id:grassBlades.length, baseX:x, h:30, w:30, 
+                    swayOffset:0, layerDepth:l.depth, isTumbleweed:true,
+                    speed: (Math.random() + 0.8) * 2, seed: Math.random()
                 });
             }
         }
-    } 
-    landscapes.push(hills); 
+    });
 }
 
-// 💡 [수정] 마우스 원근감이 아닌, 실제 '월드 X 좌표'에 따른 지형 높이 반환
-export function getGroundY(worldX) {
-    if (!landscapes || !landscapes[3] || !landscapes[3].points) {
-        return 500; 
+// ==========================================================================================
+// [RENDERING] 렌더링 최적화 (그리드 기반 조회)
+// ==========================================================================================
+
+export function renderTrees(ctx, layerIndex, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather) {
+    const layer = landscapes[layerIndex];
+    if (!layer) return;
+
+    const offsetX = -cameraX * layer.depth;
+    const offsetY = -currentParallaxY * 50 * layer.depth;
+    const distanceFog = (1 - layer.depth) * 0.9;
+    const haze = Math.min(1.0, distanceFog + (currentFog * 0.8));
+    
+    const adjustColor = (r, g, b, a = 1) => {
+        return `rgba(${Math.round(lerp(r, fogRgb[0], haze))},${Math.round(lerp(g, fogRgb[1], haze))},${Math.round(lerp(b, fogRgb[2], haze))},${a})`;
+    };
+
+    // ★ [최적화] 현재 화면에 보이는 그리드 인덱스 계산
+    // Parallax 좌표계 역산: 화면의 왼쪽(0)과 오른쪽(W)이 월드 좌표상 어디인지?
+    // 보이는 WorldX = ScreenX / depth + cameraX (대략적)
+    // 실제로는 baseX가 월드 좌표이므로, 화면에 들어오는지 검사해야 함.
+    // 화면 범위: 0 ~ ctx.canvas.width
+    // 물체 화면 X = baseX - cameraX * depth
+    // 0 < baseX - cameraX * depth < Width
+    // cameraX * depth < baseX < Width + cameraX * depth
+    // baseX 범위 = [cameraX * depth, (cameraX + Width) * depth] 가 아니라
+    // Parallax 식: ScreenX = (WorldX - CameraX) * Depth  (이게 일반적) -> 우리 코드: ScreenX = WorldX - CameraX * Depth
+    // 즉, WorldX = ScreenX + CameraX * Depth
+    
+    const startWorldX = cameraX * layer.depth - 200; // 여유분 200
+    const endWorldX = startWorldX + ctx.canvas.width + 400; // 화면 너비만큼 + 여유분
+
+    const startKey = Math.floor(startWorldX / GRID_SIZE);
+    const endKey = Math.floor(endWorldX / GRID_SIZE);
+
+    // 1. 울타리 렌더링 (그리드 조회)
+    for(let k = startKey; k <= endKey; k++) {
+        if(!fenceGrid[k]) continue;
+        fenceGrid[k].forEach(f => {
+            if(f.depth !== layer.depth) return;
+            const wy = calculateGroundY(f.x, ctx.canvas.height, layer.depth);
+            const fx = f.x + offsetX; const fy = wy + offsetY;
+            renderFence(ctx, fx, fy, adjustColor, f.seed);
+        });
     }
-    let layer = landscapes[3]; // 메인 언덕 레이어
-    let p1 = layer.points[0];
-    let p2 = layer.points[1];
 
-    for (let i = 0; i < layer.points.length - 1; i++) {
-        if (layer.points[i].x <= worldX && layer.points[i+1].x >= worldX) {
-            p1 = layer.points[i];
-            p2 = layer.points[i+1];
-            break;
-        }
-    }
-    // 선형 보간으로 정확한 높이 계산
-    let t = (worldX - p1.x) / (p2.x - p1.x);
-    return lerp(p1.y, p2.y, t);
-}
+    // 2. 나무 렌더링 (그리드 조회)
+    for(let k = startKey; k <= endKey; k++) {
+        if(!treeGrid[k]) continue;
+        treeGrid[k].forEach(t => {
+            if(t.layerDepth !== layer.depth) return;
 
-// ★ [최종 수정판 5] 줄무늬 고정 (Texture Locking) 패치
-export function renderRuins(ctx, cameraX, currentParallaxY, currentFog, fogRgb, minD, maxD, W, H) {
-    ctx.save();
-    let layerRuins = ruins.filter(r => r.depth >= minD && r.depth < maxD);
-    layerRuins.sort((a, b) => a.depth - b.depth);
+            const wy = calculateGroundY(t.baseX, ctx.canvas.height, layer.depth);
+            t.x = t.baseX + offsetX; 
+            t.y = wy + offsetY;
 
-    for(let rObj of layerRuins) {
-        let px = rObj.x - cameraX * rObj.depth; 
-        let py = rObj.y - (currentParallaxY * 40 * rObj.depth); 
-        
-        let topY = rObj.isTall ? -5000 : (py - rObj.h);
-
-        if (px < -rObj.w * 1.5 || px > W + rObj.w * 1.5) continue;
-
-        let haze = Math.max(0, 1 - rObj.depth * 1.2); haze = Math.min(1, haze + currentFog * 0.7);
-        
-        let baseTone = 160 + rObj.tone;
-        let baseColor = [baseTone, baseTone - 5, baseTone - 10];
-
-        let r = lerp(baseColor[0], fogRgb[0], haze);
-        let g = lerp(baseColor[1], fogRgb[1], haze);
-        let b = lerp(baseColor[2], fogRgb[2], haze);
-        
-        let shadowColor = `rgb(${r*0.5}, ${g*0.5}, ${b*0.5})`;
-        let midColor = `rgb(${r*0.8}, ${g*0.8}, ${b*0.8})`;
-        let highlightColor = `rgb(${r*1.05}, ${g*1.05}, ${b*1.05})`;
-        let deepCrackColor = `rgba(0,0,0, ${0.3 * rObj.depth})`;
-
-        function drawMonolith(x, yBottom, yTop, w) {
-            let height = yBottom - yTop;
-
-            // 1. 기둥 몸통
-            let grad = ctx.createLinearGradient(x, 0, x + w, 0);
-            grad.addColorStop(0, shadowColor);
-            grad.addColorStop(0.3, midColor);
-            grad.addColorStop(0.7, highlightColor);
-            grad.addColorStop(1, shadowColor);
-            ctx.fillStyle = grad;
-            ctx.fillRect(x, yTop, w, height);
-
-            // 2. 지층 무늬 (★ 핵심 수정: 기둥 위치에 고정시킴)
-            ctx.fillStyle = deepCrackColor;
+            ctx.save();
+            ctx.translate(t.x, t.y);
             
-            // 화면에 보이는 영역 계산
-            let drawStart = Math.max(topY, -100);
-            let drawEnd = Math.min(py, H + 100);
+            const heightType = Math.floor(t.seed % 3); 
+            let heightMult = t.isGiant ? 1.0 : (heightType === 0 ? 0.75 : heightType === 1 ? 1.0 : 1.35);
+            const flip = (Math.floor(t.seed / 10) % 2 === 0) ? 1 : -1;
+            ctx.scale(t.size * heightMult * flip, t.size * heightMult);
 
-            // ★ [패치] 무늬가 시작되는 기준점을 기둥의 바닥(py)에 맞춰서 계산 (Texture Locking)
-            // 이렇게 하면 cy 루프가 항상 기둥의 특정 지점에서 시작되므로 무늬가 따라다님
-            let step = 15; // 무늬 간격
-            let offset = py % step; 
-            // drawStart보다 크거나 같은 첫 번째 '고정된' 좌표 찾기
-            let loopY = drawStart - (drawStart % step) + offset;
-            if(loopY < drawStart) loopY += step;
+            const time = globalRenderTime; 
 
-            for(let cy = loopY; cy < drawEnd; cy += step) {
-                // ★ [패치] sin 함수 안에 들어가는 값도 (cy - py)로 상대 좌표 사용
-                // 이제 카메라가 움직여도 (cy - py) 값은 일정하므로 무늬가 안 움직임
-                let relY = cy - py; 
-                let thickness = Math.sin(relY * 0.02 + rObj.x*0.01) * 4 + 5; 
+            if (t.isCactus) {
+                renderSaguaro(ctx, adjustColor, t.seed);
+            } else {
+                const env = getLocalEnvironment(t.baseX, layer.depth); 
+                let leafTheme, trunkTheme;
+                const tSeed = Math.floor(t.seed % 4);
                 
-                if (thickness > 6) { 
-                        ctx.fillRect(x, cy, w, thickness * 0.4);
+                if (tSeed === 0) trunkTheme = [90, 70, 50]; 
+                else if (tSeed === 1) trunkTheme = [70, 50, 40]; 
+                else if (tSeed === 2) trunkTheme = [100, 80, 60]; 
+                else trunkTheme = [80, 70, 60]; 
+
+                if (t.biome === "MAGIC_FOREST") leafTheme = (t.seed % 2 === 0) ? [100, 220, 255] : [255, 130, 200]; 
+                else if (t.biome === "FROZEN_MOUNTAIN") leafTheme = [220, 240, 255]; 
+                else if (t.biome === "CORRUPTED") leafTheme = [70, 30, 40]; 
+                else {
+                    const v = t.seed % 40;
+                    leafTheme = [60 + v, 140 + v, 50]; // 평원 초록색 고정
+                }
+
+                switch(t.biome) {
+                    case "FROZEN_MOUNTAIN":
+                        if (t.seed % 10 < 4) renderLeaflessTree(ctx, adjustColor, time, t.seed);
+                        else renderSpruceTree(ctx, adjustColor, currentSnow, t.seed);
+                        break;
+                    case "MAGIC_FOREST":
+                        renderStructuralTree(ctx, adjustColor, time, t.seed, "MAGIC", leafTheme, trunkTheme);
+                        break;
+                    case "CORRUPTED":
+                        renderTentacleTree(ctx, adjustColor, time, t.seed);
+                        break;
+                    default:
+                        if (t.seed % 10 === 0) renderBirchTree(ctx, adjustColor, time, t.seed);
+                        else renderStructuralTree(ctx, adjustColor, time, t.seed, t.isGiant ? "GIANT" : "NORMAL", leafTheme, trunkTheme);
                 }
             }
-        }
-
-        if (rObj.type === "pillar") {
-            let pX = px - rObj.w/2;
-            drawMonolith(pX, py, topY, rObj.w);
-
-            if (!rObj.isTall) {
-                ctx.fillStyle = shadowColor;
-                ctx.beginPath();
-                ctx.moveTo(pX, topY);
-                ctx.lineTo(pX + rObj.w * 0.3, topY - rObj.w*0.05);
-                ctx.lineTo(pX + rObj.w * 0.7, topY + rObj.w*0.02);
-                ctx.lineTo(pX + rObj.w, topY);
-                ctx.lineTo(pX + rObj.w, topY + rObj.depth*10); 
-                ctx.lineTo(pX, topY + rObj.depth*10);
-                ctx.closePath();
-                ctx.fill();
-            }
-
-        } else {
-            let colW = rObj.w * 0.25; 
-            let leftColX = px - rObj.w/2;
-            let rightColX = px + rObj.w/2 - colW;
-            let archBaseY = py - rObj.h;
-            let archThickness = colW; 
-
-            drawMonolith(leftColX, py, rObj.isTall ? -5000 : archBaseY, colW);
-            drawMonolith(rightColX, py, rObj.isTall ? -5000 : archBaseY, colW);
-
-            if (!rObj.isTall) {
-                ctx.fillStyle = midColor;
-                ctx.fillRect(leftColX - colW*0.2, archBaseY - archThickness, rObj.w + colW*0.4, archThickness);
-                ctx.fillStyle = shadowColor;
-                ctx.fillRect(leftColX - colW*0.2, archBaseY - archThickness*0.2, rObj.w + colW*0.4, archThickness*0.2);
-            }
-        }
-    }
-    ctx.restore();
-}
-
-// ★ [수정] 지형 렌더링 (화려한 그래픽 옵션 적용)
-export function renderLand(ctx, layer, index, fogRgb, cameraX, currentParallaxY, currentSnow, currentFog, W, H, hours, WORLD_WIDTH) { 
-    if (!layer) return;
-    let offsetX = -cameraX * layer.depth; 
-    let offsetY = -currentParallaxY * 50 * layer.depth; 
-    ctx.beginPath(); ctx.moveTo(offsetX - W, H + 500); 
-    for (let i = 0; i < layer.points.length - 1; i++) {
-        let p1 = layer.points[i], p2 = layer.points[i+1]; let cpX = (p1.x + p2.x) / 2, cpY = (p1.y + p2.y) / 2;
-        ctx.quadraticCurveTo(p1.x + offsetX, p1.y + offsetY, cpX + offsetX, cpY + offsetY);
-    }
-    ctx.lineTo(WORLD_WIDTH + offsetX + W, H); ctx.closePath();
-    
-    let [r, g, b] = layer.color; 
-    let isNight = (hours < 6 || hours > 18); 
-    let darkFactor = isNight ? 0.25 : 1.0; 
-    r *= darkFactor; g *= darkFactor; b *= darkFactor; 
-    
-    if (index < 2) { let s = 0.5 + (currentSnow * 0.5); r = lerp(r, 255, s); g = lerp(g, 255, s); b = lerp(b, 255, s); } 
-    else { r = lerp(r, 255, currentSnow); g = lerp(g, 255, currentSnow); b = lerp(b, 255, currentSnow); } 
-    
-    let haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); 
-    r = lerp(r, fogRgb[0], haze); g = lerp(g, fogRgb[1], haze); b = lerp(b, fogRgb[2], haze); 
-    
-    // ★ [핵심] 화려한 그래픽이 켜져 있을 때만 그라데이션 사용
-    if (GRAPHICS.fancyGraphics) {
-        let grad = ctx.createLinearGradient(0, H * 0.4, 0, H);
-        grad.addColorStop(0, `rgb(${r},${g},${b})`);
-        grad.addColorStop(1, `rgb(${r * 0.5},${g * 0.5},${b * 0.5})`);
-        ctx.fillStyle = grad; 
-    } else {
-        // 꺼져 있으면 그냥 단색 (성능 UP)
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-    }
-    ctx.fill(); 
-}
-
-export function renderTrees(ctx, layerIndex, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather) { 
-    let layer = landscapes[layerIndex]; 
-    if (!layer) return;
-
-    let offsetX = -cameraX * layer.depth; 
-    let offsetY = -currentParallaxY * 50 * layer.depth + 2; 
-    let haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); 
-    let isNight = (hours < 6 || hours > 18); 
-    
-    // ★★★ [수정] 이 줄을 꼭 추가하세요! (ctx한테 W값을 물어봐서 가져옴)
-    let W = ctx.canvas.width; 
-
-    trees.forEach(t => { 
-        t.x = t.baseX + offsetX; 
-        t.y = t.baseY + offsetY; 
-
-        // 이제 W를 아니까 에러가 안 납니다!
-        if (t.x < -100 || t.x > W + 100) return;
-
-        let scale = t.size; let trunkH = 50 * scale, trunkW = 12 * scale; let foliageR = 30 * scale; 
-        let tr=50, tg=30, tb=20; tr = lerp(tr, fogRgb[0], haze); tg = lerp(tg, fogRgb[1], haze); tb = lerp(tb, fogRgb[2], haze); 
-        
-        ctx.fillStyle = `rgb(${tr},${tg},${tb})`; ctx.fillRect(t.x - trunkW/2, t.y - trunkH, trunkW, trunkH); 
-        
-        let lr=isNight?10:46, lg=isNight?30:122, lb=isNight?10:50; 
-        lr = lerp(lr, fogRgb[0], haze); lg = lerp(lg, fogRgb[1], haze); lb = lerp(lb, fogRgb[2], haze); 
-        ctx.fillStyle = `rgb(${lr},${lg},${lb})`; 
-        
-        ctx.beginPath(); ctx.moveTo(t.x, t.y - trunkH - foliageR); ctx.arc(t.x, t.y - trunkH - foliageR*0.7, foliageR, 0, Math.PI * 2); ctx.fill(); 
-        ctx.beginPath(); ctx.arc(t.x - foliageR*0.6, t.y - trunkH, foliageR*0.7, 0, Math.PI * 2); ctx.fill(); 
-        ctx.beginPath(); ctx.arc(t.x + foliageR*0.6, t.y - trunkH, foliageR*0.7, 0, Math.PI * 2); ctx.fill(); 
-        
-        if (currentSnow > 0.1) { ctx.fillStyle = `rgba(255,255,255,${currentSnow * (1 - haze)})`; ctx.beginPath(); ctx.arc(t.x, t.y - trunkH - foliageR*0.7, foliageR*0.8, Math.PI, 0); ctx.fill(); } 
-
-        if (isNight && currentWeather.id !== "rain" && currentWeather.id !== "snow" && GRAPHICS.showFireflies) {
-            ctx.save();
-            ctx.fillStyle = "#b3e5fc";
-            if (!GRAPHICS.simpleProjectiles) {
-                ctx.shadowBlur = 10; ctx.shadowColor = "#b3e5fc";
-            }
-            for(let f=0; f<3; f++) {
-                let flyTime = globalRenderTime * 0.02 + t.id + f * 5;
-                let fx = t.x + Math.sin(flyTime * 1.3) * (40 * scale);
-                let fy = t.y - trunkH - (20 * scale) + Math.cos(flyTime * 0.8) * (30 * scale);
-                ctx.globalAlpha = Math.max(0, (Math.sin(flyTime * 3) + 1) / 2); 
-                ctx.beginPath();
-                ctx.arc(fx, fy, 1.5 * scale, 0, Math.PI * 2);
-                ctx.fill();
-            }
             ctx.restore();
-        }
-    }); 
+
+            if (layer.depth === 1.0 && !t.isCactus && globalRenderTime % 120 === 0 && Math.random() < 0.003) {
+                const itemId = currentWeather.id === "clear" ? "apple" : "herb_blue";
+                spawnGatherItem(t.x, t.y - (t.size * heightMult * 100), itemId, "tree", t.id);
+            }
+        });
+    }
 }
 
+// [6] 풀 & 꽃 렌더링 (그리드 조회 최적화)
+export function renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W, globalRenderTime, biomeMgr, targetDepth) {
+    let removeIndices = [];
 
-// [최적화] 풀 렌더링 (LOD: Level of Detail 적용)
-export function renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W) { 
-    let layer = landscapes[3]; 
-    if (!landscapes[3]) return;
-    let offsetX = -cameraX * layer.depth; 
-    let offsetY = -currentParallaxY * 50 * layer.depth; 
+    // 1. 회전초는 움직이므로 기존 배열 사용 (수량 적음)
+    grassBlades.forEach((g, index) => {
+        if (!g.isTumbleweed) return; // 회전초만 처리
+        if (g.layerDepth !== targetDepth) return;
+
+        g.baseX += g.speed; 
+        const groundY = calculateGroundY(g.baseX, ctx.canvas.height, g.layerDepth);
+        g.x = g.baseX - cameraX * g.layerDepth;
+        g.y = groundY - currentParallaxY * 50 * g.layerDepth;
+
+        if (g.x > W + 200 || g.x < -200) { removeIndices.push(index); return; }
+
+        const roll = (g.baseX * 0.05); 
+        const bounce = Math.abs(Math.sin(g.baseX * 0.03)) * 8; 
+
+        ctx.save(); ctx.translate(g.x, g.y - 12 - bounce); ctx.rotate(roll);
+        ctx.strokeStyle = `rgb(110, 90, 60)`; ctx.lineWidth = 1.2;
+        for(let k=0; k<5; k++) { ctx.beginPath(); ctx.ellipse(0, 0, 12, 8, k * (Math.PI/2.5), 0, Math.PI*2); ctx.stroke(); }
+        ctx.restore();
+    });
+    for (let i = removeIndices.length - 1; i >= 0; i--) grassBlades.splice(removeIndices[i], 1);
+
+    // 2. ★ 일반 풀은 그리드 조회 (수량 엄청 많음 -> 최적화 핵심)
+    const startWorldX = cameraX * targetDepth - 100;
+    const endWorldX = startWorldX + W + 200;
+    const startKey = Math.floor(startWorldX / GRID_SIZE);
+    const endKey = Math.floor(endWorldX / GRID_SIZE);
+
+    for(let k = startKey; k <= endKey; k++) {
+        if(!grassGrid[k]) continue;
+        
+        // forEach 대신 for문 사용 (조금 더 빠름)
+        const chunk = grassGrid[k];
+        for(let i=0; i<chunk.length; i++) {
+            const g = chunk[i];
+            if (g.layerDepth !== targetDepth) continue;
+
+            const groundY = calculateGroundY(g.baseX, ctx.canvas.height, g.layerDepth);
+            g.x = g.baseX - cameraX * g.layerDepth;
+            g.y = groundY - currentParallaxY * 50 * g.layerDepth;
+
+            // 화면 밖이면 그리기 스킵 (이중 체크)
+            if (g.x < -50 || g.x > W + 50) continue;
+
+            const env = getLocalEnvironment(g.baseX, g.layerDepth);
+            let r = env.color[0]; let gr = env.color[1]; let b = env.color[2];
+
+            const lFog = (1 - g.layerDepth) * 0.5 + currentFog;
+            const finalR = lerp(r, fogRgb[0], lFog);
+            const finalG = lerp(gr, fogRgb[1], lFog);
+            const finalB = lerp(b, fogRgb[2], lFog);
+
+            ctx.fillStyle = `rgb(${Math.round(finalR)},${Math.round(finalG)},${Math.round(finalB)})`;
+
+            const sway = Math.sin(windTime + g.swayOffset) * 6;
+            
+            if (g.isFlower) {
+                ctx.beginPath(); ctx.moveTo(g.x, g.y + 3); 
+                ctx.lineTo(g.x + sway, g.y - g.h);
+                ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = g.flowerColor > 0.5 ? "#FFD700" : "#E0B0FF"; 
+                ctx.beginPath(); ctx.arc(g.x + sway, g.y - g.h, 3, 0, Math.PI*2); ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(g.x - 2, g.y + 5); 
+                ctx.lineTo(g.x + 2, g.y + 5);
+                ctx.quadraticCurveTo(g.x + sway, g.y - g.h * 0.7, g.x + sway * 1.5, g.y - g.h);
+                ctx.fill(); 
+            }
+
+            if (g.layerDepth === 1.0 && globalRenderTime % 150 === 0 && Math.random() < 0.0005) {
+                spawnGatherItem(g.x, g.y - g.h, "fiber", "grass", g.id);
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------
+// [아래 상세 함수들은 변경 없음 - 그대로 유지]
+// -----------------------------------------------------------
+
+function renderFence(ctx, x, y, col, seed) {
+    const wood = col(100, 80, 60); ctx.fillStyle = wood;
+    ctx.fillRect(x-5, y-35, 10, 35);
+    if(seed > 0.3) ctx.fillRect(x-20, y-25, 45, 5);
+    if(seed < 0.7) ctx.fillRect(x-20, y-12, 45, 5);
+}
+
+// ★ [개선됨] 구조적 나무 (높이/비율 다양화 + 색상 적용 + 플랫 디자인)
+function renderStructuralTree(ctx, col, time, seed, type="NORMAL", leafRgb=[50,120,50], trunkRgb=[85,65,45]) {
+    const isGiant = type === "GIANT";
     
-    // 간소화 모드인지 미리 체크
-    const isSimple = (typeof GRAPHICS !== 'undefined' && GRAPHICS.simpleProjectiles); // 공격 간소화 옵션 재활용하거나 새로 파도 됨
+    // 줄기 색 (단색)
+    const trunkColor = col(trunkRgb[0], trunkRgb[1], trunkRgb[2]);
+    // 잎 색 (단색)
+    const leafColor = col(leafRgb[0], leafRgb[1], leafRgb[2]);
 
-    let haze = 0;
-    if (GRAPHICS.showGrass) {
-        haze = Math.min(1.0, layer.baseFog + (currentFog * 0.8)); 
-        ctx.lineWidth = 1.5; 
-        ctx.lineCap = "round";
+    const rng = (offset) => Math.sin(seed * 999 + offset) * 12345 % 1;
+    
+    // 나무 비율 다양화 (키가 작으면 퍼지고, 크면 좁게)
+    const heightType = Math.floor(seed % 3);
+    const spreadFactor = (heightType === 0) ? 1.3 : (heightType === 2) ? 0.7 : 1.0;
+
+    function drawBranch(len, width, angle, depth) {
+        ctx.save();
+        const sway = Math.sin(time * 0.015 + depth + seed) * (0.01 + depth * 0.005);
+        ctx.rotate(angle + sway);
+
+        // 플랫 디자인 줄기 (그라데이션 제거)
+        ctx.fillStyle = trunkColor;
+        ctx.beginPath();
+        ctx.moveTo(-width/2, 0); 
+        ctx.lineTo(width/2, 0);
+        ctx.lineTo(width * 0.4, -len);
+        ctx.lineTo(-width * 0.4, -len);
+        ctx.fill();
+
+        ctx.translate(0, -len);
+
+        if (depth > 0) {
+            const branchCount = 2 + (Math.abs(rng(depth)) > 0.7 ? 1 : 0);
+            for (let i = 0; i < branchCount; i++) {
+                const dir = (i / (branchCount - 1)) - 0.5;
+                const spread = (1.0 + rng(depth * 10) * 0.3) * spreadFactor;
+                const nextAngle = dir * spread; 
+                const nextLen = len * (0.7 + rng(depth * 20) * 0.2);
+                const nextWidth = width * 0.65;
+                drawBranch(nextLen, nextWidth, nextAngle, depth - 1);
+            }
+        } else {
+            // 잎 (단색, 그림자 제거)
+            if (type === "MAGIC") {
+                ctx.shadowBlur = 15; 
+                ctx.shadowColor = `rgba(${leafRgb[0]}, ${leafRgb[1]}, ${leafRgb[2]}, 0.8)`;
+            }
+            ctx.fillStyle = leafColor;
+            
+            for(let k=0; k<4; k++) {
+                const lx = rng(k)*25; const ly = rng(k+1)*20;
+                ctx.beginPath();
+                ctx.arc(lx, ly - 5, 20 + rng(k+2)*10, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
     }
 
-    grassBlades.forEach(g => { 
-        g.x = g.baseX + offsetX; 
-        g.y = g.baseY + offsetY; 
+    const startLen = isGiant ? 110 : (70 + Math.abs(rng(0))*30);
+    const startWidth = isGiant ? 35 : 15;
+    const startDepth = isGiant ? 5 : 3;
+    drawBranch(startLen, startWidth, 0, startDepth);
+}
 
-        if (!GRAPHICS.showGrass) return;
-        // 화면 밖 Culling (여유 범위 50px)
-        if (g.x < -50 || g.x > W + 50) return;
+function renderBirchTree(ctx, col, time, seed) {
+    const trunk = col(230, 230, 220); const black = col(40, 40, 40); const leaf = col(160, 220, 80);
+    const sway = Math.sin(time * 0.02 + seed) * 0.05; ctx.rotate(sway);
+    ctx.fillStyle = trunk; ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(6,0); ctx.lineTo(3,-140); ctx.lineTo(-3,-140); ctx.fill();
+    ctx.strokeStyle = black; ctx.lineWidth = 1.5; for(let y=10; y<130; y+=10 + (seed%10)) { ctx.beginPath(); ctx.moveTo(-4, -y); ctx.lineTo(4, -y); ctx.stroke(); }
+    ctx.translate(0, -140); ctx.fillStyle = leaf; ctx.beginPath(); ctx.ellipse(0, 0, 35, 60, 0, 0, Math.PI*2); ctx.fill();
+}
+function renderLeaflessTree(ctx, col, time, seed) {
+    const trunkColor = col(70, 70, 80); const rng = (o) => Math.sin(seed*77+o)*123%1;
+    function draw(len, w, ang, d) {
+        ctx.save(); ctx.rotate(ang); ctx.fillStyle = trunkColor;
+        ctx.beginPath(); ctx.moveTo(-w/2,0); ctx.lineTo(w/2,0); ctx.lineTo(w*0.3,-len); ctx.lineTo(-w*0.3,-len); ctx.fill();
+        ctx.translate(0,-len);
+        if(d>0) { const cnt = 2 + (rng(d)>0.5?1:0); for(let i=0; i<cnt; i++) draw(len*0.7, w*0.6, ((i/(cnt-1))-0.5)*1.2, d-1); }
+        ctx.restore();
+    }
+    draw(70, 12, 0, 3);
+}
+function renderSpruceTree(ctx,col,snow,seed) {
+    ctx.fillStyle = col(50,40,30); ctx.fillRect(-6,-160,12,160); const needle = col(30,60,45); const sn = col(240,250,255,0.9);
+    for(let i=0; i<8; i++) { const y=-20-i*20, w=70-i*8; ctx.fillStyle=needle; ctx.beginPath(); ctx.moveTo(0,y-30); ctx.lineTo(w,y); ctx.lineTo(-w,y); ctx.fill(); if(snow>0.2){ ctx.fillStyle=sn; ctx.beginPath(); ctx.moveTo(0,y-30); ctx.lineTo(w*0.6,y-10); ctx.lineTo(-w*0.6,y-10); ctx.fill(); } }
+}
+function renderSaguaro(ctx,col,seed) { const c = col(60,120,60); ctx.fillStyle=c; ctx.strokeStyle=c; ctx.lineWidth=22; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-110); ctx.stroke(); if(seed%2>0.5) { ctx.beginPath(); ctx.moveTo(0,-50); ctx.lineTo(-35,-50); ctx.lineTo(-35,-80); ctx.stroke(); } if(seed%3>1) { ctx.beginPath(); ctx.moveTo(0,-70); ctx.lineTo(35,-70); ctx.lineTo(35,-100); ctx.stroke(); } }
+function renderPricklyPear(ctx,col,seed) { ctx.fillStyle=col(80,140,60); const d=(x,y,w,h,a)=>{ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.beginPath();ctx.ellipse(0,-h/2,w,h,0,0,Math.PI*2);ctx.fill();ctx.restore();}; d(0,0,15,20,0); d(0,-35,20,25,0.3); d(-15,-40,14,18,-0.5); d(15,-45,14,20,0.5); }
+function renderTentacleTree(ctx,col,time,seed) { const c=col(50,0,70); ctx.fillStyle=c; const s=Math.sin(time*0.04)*15; ctx.beginPath(); ctx.moveTo(-10,0); ctx.quadraticCurveTo(-20,-60,s,-140); ctx.quadraticCurveTo(20,-60,10,0); ctx.fill(); }
 
-        // 흔들림 계산
-        g.sway = Math.sin(windTime + g.swayOffset) * (currentWeather.id === "wind" ? 12 : 4); 
-        
-        // 색상 계산 (기존 코드와 동일)
-        let r = 20, gr = 80, b = 40; 
-        let darkFactor = (hours < 6 || hours > 18) ? 0.25 : 1.0; 
-        r *= darkFactor; gr *= darkFactor; b *= darkFactor; 
-        r = lerp(r, 255, currentSnow); gr = lerp(gr, 255, currentSnow); b = lerp(b, 255, currentSnow); 
-        r = lerp(r, fogRgb[0], haze); gr = lerp(gr, fogRgb[1], haze); b = lerp(b, fogRgb[2], haze); 
-        
-        ctx.strokeStyle = `rgb(${r},${gr},${b})`; 
-        ctx.beginPath(); 
-        ctx.moveTo(g.x, g.y); 
-        
-        // ★ [최적화 핵심] 간소화 모드거나 풀이 아주 작으면 '곡선' 대신 '직선'으로 그림
-        if (isSimple || currentSnow > 0.8) { 
-            // 눈 많이 오거나 간소화면 직선 (빠름)
-            ctx.lineTo(g.x + g.sway, g.y - g.h); 
-        } else {
-            // 평소엔 곡선 (예쁨)
-            ctx.quadraticCurveTo(g.x + g.sway / 2, g.y - g.h / 1.5, g.x + g.sway, g.y - g.h); 
-        }
-        ctx.stroke(); 
-    }); 
+export function spawnGatherItem(x, y, type, hostType, hostId) { if(activeSpawns.length>15)return; const itemData = consumableDB[type] || { color: "#FFF" }; activeSpawns.push({ type, x, y, hostType, hostId, life: 1000, floatY: 0, color: itemData.color }); }
+export function renderSpawns(ctx) { activeSpawns.forEach(p => { p.life--; p.floatY += 0.05; ctx.save(); ctx.translate(p.x, p.y + Math.sin(p.floatY) * 5); ctx.globalAlpha = Math.min(1, p.life / 50); ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); }); activeSpawns = activeSpawns.filter(p => p.life > 0); }
+
+// [8] 랜드 렌더링
+export function renderLand(ctx, layer, index, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr) { 
+    if (!layer || layer.points.length < 2) return;
+    let offsetX = -cameraX * layer.depth; let offsetY = -currentParallaxY * 50 * layer.depth; 
+    
+    ctx.beginPath();
+    ctx.moveTo(layer.points[0].x + offsetX, H + 500);
+    layer.points.forEach(p => ctx.lineTo(p.x + offsetX, p.y + offsetY));
+    ctx.lineTo(layer.points[layer.points.length-1].x + offsetX, H + 500); ctx.closePath();
+    
+    // ★ 3-Point Gradient Sampling with Parallax Correction
+    // ScreenX를 WorldX로 역산할 때 depth를 적용해야 함
+    // WorldX = ScreenX / Depth + CameraX (가 아니라 반대임)
+    // Parallax Equation: ScreenX = (WorldX - CameraX) * Depth
+    // WorldX = ScreenX / Depth + CameraX
+    
+    // 왼쪽 끝 화면 좌표(0)에 해당하는 월드 좌표
+    const startWorldX = (0 / layer.depth) + cameraX;
+    // 중간 화면 좌표(W/2)에 해당하는 월드 좌표
+    const midWorldX = ((W / 2) / layer.depth) + cameraX;
+    // 오른쪽 끝 화면 좌표(W)에 해당하는 월드 좌표
+    const endWorldX = (W / layer.depth) + cameraX;
+
+    // getLocalEnvironment는 이미 x / depth 보정을 내장하고 있지 않으므로
+    // 여기서 보정된 worldX를 넘기되, 함수 내부에서 또 보정하지 않도록 depth=1.0으로 호출해야 함.
+    // 하지만 위에서 getLocalEnvironment(x, depth)를 만들었으므로
+    // 차라리 "화면 좌표 기준 X"를 넘기고 함수 안에서 depth로 나누게 하는 게 일관성 있음.
+    // 따라서, 여기서는 역산하지 않고 "생성시 좌표값 기준"으로 호출함.
+    
+    // landscapes에 저장된 points는 생성 시점의 x좌표를 가지고 있음.
+    // 하지만 그라데이션은 화면 전체에 칠해야 하므로, 현재 카메라가 보고 있는 '월드 범위'를 알아야 함.
+    // 위 식 (WorldX = ScreenX / Depth + CameraX)가 맞음.
+    // 그리고 getLocalEnvironment는 (x, depth)를 받아서 x / depth를 수행함.
+    // 즉, 여기에 ScreenX + CameraX * Depth를 넘기면?? -> 복잡해짐.
+    
+    // 간소화: getLocalEnvironment를 "월드 절대 좌표"를 받는 녀석으로 정의했음 (x / depth 수행함)
+    // 따라서 여기서는 '보정 전의 값'을 넘겨야 함.
+    // 생성 루프에서 x는 절대 좌표였음.
+    // 렌더링 시에는 카메라가 이동함.
+    
+    // 올바른 호출:
+    // depth가 0.7인 레이어의 화면 왼쪽 끝(0)은 월드 좌표상 어디인가?
+    // ScreenX = (WorldX - CameraX) * Depth
+    // 0 = (WorldX - CameraX) * Depth -> WorldX = CameraX
+    // W = (WorldX - CameraX) * Depth -> WorldX = CameraX + W / Depth
+    
+    // 즉, 레이어가 깊을수록(0.1) 더 넓은 월드 범위를 보여줌.
+    // getLocalEnvironment는 x / depth를 수행하므로, 우리는 그냥 (CameraX + ScreenX) * Depth를 넘겨야...
+    // 아님. 함수 내부 로직: x / depth.
+    // 우리가 원하는 건 WorldX.
+    // 입력값 V를 줬을 때 V / depth = WorldX가 되어야 함.
+    // V = WorldX * depth.
+    
+    // WorldX(Left) = CameraX
+    // Input(Left) = CameraX * depth
+    
+    const c1 = getLocalEnvironment(cameraX * layer.depth, layer.depth).color;
+    const c2 = getLocalEnvironment((cameraX + W/2) * layer.depth, layer.depth).color;
+    const c3 = getLocalEnvironment((cameraX + W) * layer.depth, layer.depth).color;
+    
+    const haze = Math.min(1.0, (1.0 - layer.depth) * 0.8 + (currentFog * 0.8));
+    const applyFog = (c) => `rgb(${Math.round(lerp(c[0], fogRgb[0], haze))},${Math.round(lerp(c[1], fogRgb[1], haze))},${Math.round(lerp(c[2], fogRgb[2], haze))})`;
+
+    let grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, applyFog(c1));
+    grad.addColorStop(0.5, applyFog(c2));
+    grad.addColorStop(1, applyFog(c3));
+    
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'multiply';
+    let vGrad = ctx.createLinearGradient(0, 0, 0, H);
+    vGrad.addColorStop(0, "rgba(255,255,255,1)");
+    vGrad.addColorStop(0.5, "rgba(200,200,200,1)");
+    vGrad.addColorStop(1, "rgba(100,100,100,1)");
+    ctx.fillStyle = vGrad;
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
 }
