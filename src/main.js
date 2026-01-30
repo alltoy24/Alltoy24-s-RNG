@@ -2767,13 +2767,9 @@ function render() {
         // ★ [핵심 변경] AI 판단 -> 물리 적용 (Logic 분리 완료)
         // ========================================================
         
-        // (1) 두뇌 가동: "어디로 갈까?" 결정 (targetVx 설정)
-        // 플레이어 위치를 보고 쫓을지, 도망갈지, 멍때릴지 정합니다.
-        updateMobAI(c, player); 
-
-        // (2) 몸 가동: "어떻게 움직일까?" 실행 
-        // (실제 x, y 좌표 이동, 중력, 지형 충돌, 맵 밖 이탈 방지가 여기서 처리됨)
-        applyMobMovement(c, dt, H); 
+        // ★ 이제 AI 업데이트 시에도 H를 던져줍니다.
+        updateMobAI(c, player, H);  
+        applyMobMovement(c, dt, H);
         // ★ 여기 추가: 플레이어 피격 판정 (몸박)
         if (!player.isDead && player.invincibleTime <= 0 && c.hp > 0) {
             let dist = Math.abs(player.x - c.x);

@@ -9,8 +9,9 @@ const getGroundY = (x) => calculateGroundY(x, VIRTUAL_H, 1.0);
 // ========================================================
 // 1. [두뇌] AI 업데이트
 // ========================================================
-export function updateMobAI(mob, player) {
+export function updateMobAI(mob, player, realH) {
     if (player.isDead) return;
+    // ★ 핵심: 플레이어의 물리 y값에 해상도 오프셋을 더해 '진짜 시각적 위치'를 구함
 
     // 초기화
     if (!mob.state) mob.state = "idle";
@@ -27,8 +28,8 @@ export function updateMobAI(mob, player) {
     }
 
     switch (mob.typeData.aiType) {
-        case "ground_charge": aiGroundCharge(mob, player); break;
-        case "flying_ram":    aiFlyingRam(mob, player); break;
+        case "ground_charge": aiGroundCharge(mob, player, realH); break; // realH 전달
+        case "flying_ram":    aiFlyingRam(mob, player, realH); break;    // realH 전달
         default:              aiWander(mob); break; 
     }
 }
@@ -106,15 +107,18 @@ function aiGroundCharge(mob, player) {
 }
 
 // [AI 2] 공중 추적형
-function aiFlyingRam(mob, player) {
-    const dist = Math.hypot(player.x - mob.x, (player.y - 50) - mob.y);
+function aiFlyingRam(mob, player, realH) {
+    const groundOffset = realH - 1080;
+    const targetY = (player.y + groundOffset) - 50; // 보정된 Y축 기준 가슴팍
+
+    const dist = Math.hypot(player.x - mob.x, targetY - mob.y);
     const detectRange = 800; 
     
     mob.debugText = `FLY (${Math.round(dist)})`;
 
     if (dist < detectRange) {
         const dx = player.x - mob.x;
-        const dy = (player.y - 50) - mob.y;
+        const dy = targetY - mob.y; // 보정된 targetY 사용
         const angle = Math.atan2(dy, dx);
         const accel = 0.4;
         
