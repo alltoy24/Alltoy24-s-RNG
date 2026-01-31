@@ -243,23 +243,45 @@ export function renderTrees(ctx, layerIndex, fogRgb, cameraX, currentParallaxY, 
             if (t.isCactus) {
                 renderSaguaro(ctx, adjustColor, t.seed);
             } else {
+                // 1. 현재 나무 위치의 환경 색상(풀 색상)을 가져옵니다.
+                // (풀이 사용하는 로직과 동일)
                 const env = getLocalEnvironment(t.baseX, layer.depth); 
-                let leafTheme, trunkTheme;
-                const tSeed = Math.floor(t.seed % 4);
                 
+                // 2. 나무 기둥 색상 (기존 유지)
+                let trunkTheme;
+                const tSeed = Math.floor(t.seed % 4);
                 if (tSeed === 0) trunkTheme = [90, 70, 50]; 
                 else if (tSeed === 1) trunkTheme = [70, 50, 40]; 
                 else if (tSeed === 2) trunkTheme = [100, 80, 60]; 
                 else trunkTheme = [80, 70, 60]; 
 
-                if (t.biome === "MAGIC_FOREST") leafTheme = (t.seed % 2 === 0) ? [100, 220, 255] : [255, 130, 200]; 
-                else if (t.biome === "FROZEN_MOUNTAIN") leafTheme = [220, 240, 255]; 
-                else if (t.biome === "CORRUPTED") leafTheme = [70, 30, 40]; 
+                // 3. ★ 나뭇잎 색상 결정 (여기가 핵심!)
+                let leafTheme;
+
+                if (t.biome === "MAGIC_FOREST") {
+                    // 마법 숲: 고정 색상 (형광/핑크)
+                    leafTheme = (t.seed % 2 === 0) ? [100, 220, 255] : [255, 130, 200]; 
+                } 
+                else if (t.biome === "FROZEN_MOUNTAIN") {
+                    // 눈 지형: 고정 색상 (흰색)
+                    leafTheme = [220, 240, 255]; 
+                } 
                 else {
-                    const v = t.seed % 40;
-                    leafTheme = [60 + v, 140 + v, 50]; // 평원 초록색 고정
+                    // ★ 나머지(평원, 사막, 폐허, 오염 등): "지형 색상(env.color)"을 따라갑니다!
+                    // env.color는 [r, g, b] 형태입니다.
+                    // 나무마다 약간의 랜덤성(v)을 섞어 줍니다.
+                    const v = (t.seed % 40) - 20; // -20 ~ +20 변동
+
+                    // 지형 색상을 베이스로 잡고, 약간 더 어둡거나 진하게 조정
+                    // (풀보다는 나무가 보통 조금 더 진하므로 0.8~0.9 곱해줌)
+                    leafTheme = [
+                        Math.max(0, env.color[0] + v), 
+                        Math.max(0, env.color[1] + v), 
+                        Math.max(0, env.color[2] + v)
+                    ];
                 }
 
+                // 4. 그리기 함수 호출
                 switch(t.biome) {
                     case "FROZEN_MOUNTAIN":
                         if (t.seed % 10 < 4) renderLeaflessTree(ctx, adjustColor, time, t.seed);
@@ -269,15 +291,18 @@ export function renderTrees(ctx, layerIndex, fogRgb, cameraX, currentParallaxY, 
                         renderStructuralTree(ctx, adjustColor, time, t.seed, "MAGIC", leafTheme, trunkTheme);
                         break;
                     case "CORRUPTED":
+                        // 오염 지형은 텐타클 나무지만, 혹시 일반 나무가 섞여 나와도 색이 맞게 됨
                         renderTentacleTree(ctx, adjustColor, time, t.seed);
                         break;
                     default:
+                        // RUINS, PLAINS, DESERT 등 모든 일반 지형
                         if (t.seed % 10 === 0) renderBirchTree(ctx, adjustColor, time, t.seed);
                         else renderStructuralTree(ctx, adjustColor, time, t.seed, t.isGiant ? "GIANT" : "NORMAL", leafTheme, trunkTheme);
                 }
             }
             ctx.restore();
 
+            // (아이템 스폰 로직 생략...)
             if (layer.depth === 1.0 && !t.isCactus && globalRenderTime % 120 === 0 && Math.random() < 0.003) {
                 const itemId = currentWeather.id === "clear" ? "apple" : "herb_blue";
                 spawnGatherItem(t.x, t.y - (t.size * heightMult * 100), itemId, "tree", t.id);

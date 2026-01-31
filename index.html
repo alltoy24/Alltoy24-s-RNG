@@ -793,6 +793,81 @@
             /* 크기는 JS에서 제어하므로 여기서는 위치만 잡음 */
             box-shadow: 0 0 50px rgba(0,0,0,0.8); /* 게임 화면 돋보이게 그림자 */
         }
+
+        /* 1. 모달창 내용 (스크롤 되도록 수정) */
+        .modal-content { 
+            width: 80%; 
+            max-width: 800px; 
+            max-height: 80vh; /* 화면 높이의 80%까지만 차지 */
+            padding: 25px; 
+            display: flex; 
+            flex-direction: column; 
+            background: rgba(15, 15, 25, 0.95); /* 배경 좀 더 진하게 */
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 15px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+
+        /* 2. 아이템 리스트 (스크롤바 추가 & 그리드 정렬) */
+        .item-list, .scroll-list { 
+            flex: 1; /* 남은 공간 채우기 */
+            overflow-y: auto; /* 세로 스크롤 허용 */
+            
+            display: grid; /* 그리드 레이아웃 */
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* 반응형 카드 배치 */
+            gap: 10px; 
+            
+            margin-top: 15px; 
+            padding: 5px; 
+            padding-right: 10px; /* 스크롤바랑 안 겹치게 */
+        }
+
+        /* 스크롤바 디자인 */
+        .item-list::-webkit-scrollbar, .scroll-list::-webkit-scrollbar { width: 6px; }
+        .item-list::-webkit-scrollbar-track, .scroll-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .item-list::-webkit-scrollbar-thumb, .scroll-list::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+
+        /* 3. 탭 버튼 컨테이너 */
+        .tab-container {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid #333;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #888;
+            padding: 12px 0;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            transition: 0.2s;
+        }
+
+        .tab-btn:hover { background: rgba(255,255,255,0.1); color: #ccc; }
+        
+        .tab-btn.active {
+            background: rgba(255, 215, 0, 0.1);
+            color: #FFD700;
+            border-bottom: 2px solid #FFD700;
+        }
+
+        /* 4. 아이템 카드 디자인 개선 */
+        .item-card { 
+            padding: 15px; 
+            background: rgba(30,30,40,0.8); 
+            border-radius: 8px; 
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between;
+            height: 120px; /* 높이 고정 */
+        }
     </style>
     <script>
     // !function() { function detectDevTool(allow) { if(isNaN(+allow)) allow = 100; var start = +new Date(); debugger; var end = +new Date(); if(isNaN(start) || isNaN(end) || end - start > allow) { document.location.href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=2s" } } if(window.attachEvent) { if (document.readyState === "complete" || document.readyState === "interactive") { detectDevTool(); window.attachEvent('onresize', detectDevTool); window.attachEvent('onmousemove', detectDevTool); window.attachEvent('onfocus', detectDevTool); window.attachEvent('onblur', detectDevTool); } else { setTimeout(argument.callee, 0); } } else { window.addEventListener('load', detectDevTool); window.addEventListener('resize', detectDevTool); window.addEventListener('mousemove', detectDevTool); window.addEventListener('focus', detectDevTool); window.addEventListener('blur', detectDevTool); } }();
@@ -918,7 +993,22 @@
         <div id="mobile-controls" style="display: none;"><div class="control-group left"><button id="btn-left" class="touch-btn">◀</button><button id="btn-right" class="touch-btn">▶</button></div></div>
     </div>
 
-    <div id="consumable-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🧪 CONSUMABLES</h2><button class="close-btn" onclick="toggleModal('consumable-modal', false)">✖</button></div><div id="consumable-list" class="scroll-list"></div></div></div>
+    <div id="consumable-modal" class="modal interactive">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2 class="modal-title">🎒 INVENTORY</h2>
+                <button class="close-btn" onclick="toggleModal('consumable-modal', false)">✖</button>
+            </div>
+
+            <div class="tab-container" id="item-tabs-container">
+                <button class="tab-btn active" onclick="switchItemTab('material')">💎 MATERIALS</button>
+                <button class="tab-btn" onclick="switchItemTab('consumable')">🧪 CONSUMABLES</button>
+                <button class="tab-btn" onclick="switchItemTab('etc')">📦 ETC</button>
+            </div>
+
+            <div id="consumable-list" class="scroll-list"></div>
+        </div>
+    </div>
     <div id="alchemy-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">⚗️ ALCHEMY LAB</h2><button class="close-btn" onclick="toggleModal('alchemy-modal', false)">✖</button></div><div id="alchemy-list" class="scroll-list"></div></div></div>
     <div id="inventory-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🎒 AURAS</h2><button class="close-btn" onclick="toggleModal('inventory-modal', false)">✖</button></div><div id="inv-list" class="scroll-list"></div></div></div>
     <div id="crafting-modal" class="modal interactive"><div class="modal-content glass-panel"><div class="modal-header"><h2 class="modal-title">🛠️ CRAFTING</h2><button class="close-btn" onclick="toggleModal('crafting-modal', false)">✖</button></div><div id="craft-list" class="scroll-list"></div></div></div>

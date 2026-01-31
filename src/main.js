@@ -45,9 +45,11 @@ import {
 import { BiomeManager } from './logic/biomeManager.js'; // 1. 클래스 가져오기
 import { drawCritter } from './graphics/mobRenderer.js'; // ★ 이거 추가!
 import { updateMobAI, applyMobMovement } from './logic/mobBehavior.js';
+import { BiomeVFXManager } from './logic/biomeVFX.js';
 
 // 2. 객체 생성 (ReferenceError 해결의 핵심)
 const biomeMgr = new BiomeManager();
+const biomeVFX = new BiomeVFXManager();
 
 // main.js 상단 전역 변수 수정
 let W = window.innerWidth;
@@ -56,8 +58,12 @@ let H = window.innerHeight;
 // 기준 해상도 (가로 1920을 기준으로 모든 크기를 계산해서 맵핵 방지)
 const BASE_W = 1920;
 let scaleRatio = 1;
+let consumableInv = {};
 
 const WORLD_WIDTH = 325000;
+
+let targetCloudCount = 3; // 기본 구름 개수
+let targetCloudColor = { r: 255, g: 255, b: 255, a: 0.8 }; // 기본 흰색
 
 let fragments = 0; 
 let inventory = []; 
@@ -483,6 +489,42 @@ socket.on('timeSync', (serverTimeMinutes) => {
 function applyNewWeather(newWeather) {
     currentWeather = newWeather;
 
+    switch (currentWeather.id) {
+        case "clear":
+            targetCloudCount = 3;  // 개수 대폭 감소 (5개만)
+            targetCloudColor = { r: 255, g: 255, b: 255, a: 0.1 }; // 투명도 0.3 (아주 연함)
+            break;
+        case "cloudy":
+            targetCloudCount = 12; // 적당히
+            targetCloudColor = { r: 220, g: 220, b: 220, a: 0.3 }; // 반투명 회색
+            break;
+        case "rain":
+            targetCloudCount = 24; // 비올 때도 너무 꽉 막히지 않게 조절
+            targetCloudColor = { r: 150, g: 150, b: 145, a: 0.4 }; // 진한 먹구름
+            break;
+        case "thunder":
+            targetCloudCount = 24; // 비올 때도 너무 꽉 막히지 않게 조절
+            targetCloudColor = { r: 80, g: 80, b: 90, a: 0.5 }; // 진한 먹구름
+            break;
+        case "snow":
+            targetCloudCount = 16;
+            targetCloudColor = { r: 240, g: 240, b: 255, a: 0.3 };
+            break;
+        case "foggy":
+            targetCloudCount = 10;
+            targetCloudColor = { r: 200, g: 200, b: 200, a: 0.2 }; // 거의 안 보임
+            break;
+        case "glitch":
+            targetCloudCount = 5;
+            targetCloudColor = { r: 50, g: 0, b: 50, a: 0.25 };
+            break;
+        default:
+            targetCloudCount = 6;
+            targetCloudColor = { r: 255, g: 255, b: 255, a: 0.2 };
+            break;
+    }
+
+    // --- [2] 기존 로직 (알림, 소리, 파티클 등) ---
     if(currentWeather.id === "glitch") {
         showSideNotification("WEATHER ANOMALY", "<span class='glitch-text'>V̵O̵I̵D̵</span>", "#ff003c");
     } else {
@@ -495,9 +537,7 @@ function applyNewWeather(newWeather) {
         else topWeatherDisplay.innerText = currentWeather.name;
     }
 
-    // ★ 수정됨: 인자가 2개로 줄어듦 (플레이어 객체는 audioManager가 관리)
     smoothAudioTransition(currentWeather.music, currentWeather.sfx);
-    
     calcBuffs(); 
 
     targetFog = (currentWeather.id === "foggy") ? 1.0 : 0.0;
@@ -581,8 +621,6 @@ function takeDamage(amount) {
 /************************************************************************
  * DATA 영역 (여기에 기존의 거대한 데이터들을 그대로 붙여넣어 주세요!)
  ************************************************************************/
-
-let consumableInv = {}; 
 // 💡 [복구] 4개의 독립된 버프 슬롯 (채집_행운, 채집_속도, 물약_행운, 물약_속도)
 let activeBuffs = {
     gather_luck: null, gather_speed: null,
@@ -1036,18 +1074,22 @@ function updateAllUI() {
     if(typeof renderQuickBar === 'function') renderQuickBar(consumableInv);
 }
 
-// [수정] 버프 계산 및 UI 업데이트 (중복 표시 방지 추가)
-function calcBuffs() { 
+export function calcBuffs(currentWeather, isFeverTime, feverTimeLeft, equippedGears) { 
     let gearLuck = 0, gearSpeed = 0; 
-    equippedGears.forEach(gearId => { 
-        if (gearId !== null) { 
-            let gear = gearDB.find(g => g.id === gearId); 
-            if (gear) { gearLuck += gear.luck; gearSpeed += gear.speed; } 
-        } 
-    }); 
     
-    let weatherLuck = currentWeather.buff ? currentWeather.buff.luck : 0;
-    let weatherSpeed = currentWeather.buff ? currentWeather.buff.speed : 0;
+    // 장비 스탯 합산 (equippedGears가 넘어왔을 때만)
+    if (equippedGears) {
+        equippedGears.forEach(gearId => { 
+            if (gearId !== null) { 
+                let gear = gearDB.find(g => g.id === gearId); 
+                if (gear) { gearLuck += gear.luck; gearSpeed += gear.speed; } 
+            } 
+        }); 
+    }
+    
+    // 데이터 안전장치 (undefined 방지)
+    let weatherLuck = (currentWeather && currentWeather.buff) ? currentWeather.buff.luck : 0;
+    let weatherSpeed = (currentWeather && currentWeather.buff) ? currentWeather.buff.speed : 0;
     let feverLuck = isFeverTime ? 1.0 : 0;
     let feverSpeed = isFeverTime ? 1.0 : 0;
 
@@ -1055,49 +1097,65 @@ function calcBuffs() {
     let buffText = ""; 
     let now = Date.now(); 
 
-    // ★ [핵심] 이미 화면에 표시한 버프 이름을 기억할 배열
     let displayedNames = [];
 
-    for (let key in activeBuffs) {
+    // 활성화된 버프 루프
+    for (let key in activeBuffs) { // activeBuffs는 ui.js 상단에 선언되어 있어야 함
         let buff = activeBuffs[key];
         if (buff) {
             let remaining = (buff.endTime - now) / 1000;
 
             if (remaining > 0) {
-                // 1. 스탯 계산은 무조건 수행 (행운/속도 각각)
                 if (key.includes("luck")) consumableLuck += buff.val;
                 if (key.includes("speed")) consumableSpeed += buff.val;
                 
-                // 2. 화면 표시는 '아직 표시 안 된 이름'일 때만 수행
                 if (!displayedNames.includes(buff.name)) {
                     let effectText = buff.desc.split("간 ")[1] || buff.desc;
-                    buffText += `<span style="color:${buff.color}; margin-right:15px; font-weight:900; text-shadow: 0 0 5px ${buff.color};">⏳ ${buff.name} [${effectText}] (${Math.ceil(remaining)}초)</span>`; 
-                    
-                    // 표시했음을 기록 (다음에 같은 이름 나오면 무시)
+                    // ★ 여기가 핵심: 매 프레임 남은 시간을 다시 그립니다.
+                    buffText += `<div style="color:${buff.color}; font-weight:700; text-shadow: 0 0 5px ${buff.color}; text-align:right;">
+                        ⏳ ${buff.name} (${Math.ceil(remaining)}s)
+                    </div>`; 
                     displayedNames.push(buff.name);
                 }
             } else {
-                activeBuffs[key] = null;
+                activeBuffs[key] = null; // 시간 다 되면 삭제
             }
         }
     }
 
-    if (isFeverTime) buffText += `<span style="color:#FFD700; margin-right:15px; font-weight:900; animation: glitch 0.5s infinite;">🔥 FEVER TIME! (${Math.ceil(feverTimeLeft/60)}초)</span>`;
-
-    if (weatherLuck !== 0 || weatherSpeed !== 0) {
-        let effectColor = (weatherLuck > 0 || weatherSpeed > 0) ? "#81C784" : "#E57373"; 
-        let details = [];
-        if (weatherLuck !== 0) details.push(`행운 ${weatherLuck > 0 ? '+' : ''}${Math.round(weatherLuck * 100)}%`);
-        if (weatherSpeed !== 0) details.push(`속도 ${weatherSpeed > 0 ? '+' : ''}${Math.round(weatherSpeed * 100)}%`);
-        let weatherName = currentWeather.id === "glitch" ? `<span class="glitch-text">${currentWeather.name}</span>` : currentWeather.name;
-        buffText += `<span style="color:${effectColor}; margin-right:15px; font-weight:900;">🌤️ [${weatherName}] ${details.join(", ")}</span>`;
+    if (isFeverTime) {
+        buffText += `<div style="color:#FFD700; font-weight:900; animation: glitch 0.5s infinite; text-align:right;">
+            🔥 FEVER TIME! (${Math.ceil(feverTimeLeft/60)}s)
+        </div>`;
     }
 
-    globalLuckMultiplier = 1.0 + gearLuck + consumableLuck + weatherLuck + feverLuck; 
-    globalSpeedMultiplier = 1.0 + gearSpeed + consumableSpeed + weatherSpeed + feverSpeed; 
-    if(globalSpeedMultiplier < 0.2) globalSpeedMultiplier = 0.2;
+    if (currentWeather && (weatherLuck !== 0 || weatherSpeed !== 0)) {
+        let effectColor = (weatherLuck > 0 || weatherSpeed > 0) ? "#81C784" : "#E57373"; 
+        let details = [];
+        if (weatherLuck !== 0) details.push(`LUCK ${weatherLuck > 0 ? '+' : ''}${Math.round(weatherLuck * 100)}%`);
+        if (weatherSpeed !== 0) details.push(`SPD ${weatherSpeed > 0 ? '+' : ''}${Math.round(weatherSpeed * 100)}%`);
+        let weatherName = currentWeather.id === "glitch" ? `<span class="glitch-text">${currentWeather.name}</span>` : currentWeather.name;
+        
+        buffText += `<div style="color:${effectColor}; font-weight:700; text-align:right;">
+            🌤️ [${weatherName}] ${details.join(", ")}
+        </div>`;
+    }
 
-    document.getElementById("buff-display").innerHTML = buffText + `<span id="buff-luck">🍀 행운: x${globalLuckMultiplier.toFixed(2)}</span><span id="buff-speed">⚡ 속도: x${globalSpeedMultiplier.toFixed(2)}</span>`; 
+    let totalLuck = 1.0 + gearLuck + consumableLuck + weatherLuck + feverLuck; 
+    let totalSpeed = 1.0 + gearSpeed + consumableSpeed + weatherSpeed + feverSpeed; 
+    if(totalSpeed < 0.2) totalSpeed = 0.2;
+
+    const buffDisplay = document.getElementById("buff-display");
+    if (buffDisplay) {
+        buffDisplay.innerHTML = buffText + `
+            <div style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:5px;">
+                <span id="buff-luck" style="display:block; color:#FFD700;">🍀 LUCK: x${totalLuck.toFixed(2)}</span>
+                <span id="buff-speed" style="display:block; color:#00E5FF;">⚡ SPEED: x${totalSpeed.toFixed(2)}</span>
+            </div>`; 
+    }
+
+    // ★ 계산된 배율을 main.js로 반환해줍니다.
+    return { luck: totalLuck, speed: totalSpeed };
 }
 
 // [수정] 창을 열 때(Show=true)만 해당 목록을 새로고침하는 최적화 함수
@@ -1415,6 +1473,7 @@ function forceResize() {
         // 배경 재생성 (바뀐 H값 적용)
         if(typeof generateNature === 'function') {
             generateNature(canvas, vfxCanvas, W, H, WORLD_WIDTH);
+            clouds.length = 0;
         }
     }
 
@@ -2048,6 +2107,17 @@ function render() {
     ctx.clearRect(0, 0, W, H); 
 
     updateScarfPhysics();
+
+    if (typeof calcBuffs === 'function') {
+        // ui.js의 함수를 호출하면서 현재 상태(날씨, 피버, 장비)를 전달합니다.
+        const buffs = calcBuffs(currentWeather, isFeverTime, feverTimeLeft, equippedGears);
+        
+        // ui.js가 계산해준 최신 배율을 게임에 적용합니다.
+        if (buffs) {
+            globalLuckMultiplier = buffs.luck;
+            globalSpeedMultiplier = buffs.speed;
+        }
+    }
     
     // 1. 순수 날씨 기반 색상 가져오기
     const targetSky = getCurrentSkyColors(preciseHour, currentWeather);
@@ -2231,17 +2301,45 @@ function render() {
         } 
     }
     
+    // --- 구름 로직 시작 ---
     if (GRAPHICS.showClouds) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${currentWeather.id === "cloudy" ? 0.3 : 0.1})`;
-        clouds.forEach(c => {
+        // 1. 구름 개수 부드럽게 조절 (Lerp 비슷한 효과)
+        if (clouds.length < targetCloudCount) {
+            if (Math.random() < 0.1) { // 천천히 추가
+                clouds.push({
+                    x: Math.random() * WORLD_WIDTH, // 월드 전체에 랜덤 배치
+                    y: Math.random() * H * 0.4,     // 하늘 위쪽에만
+                    size: Math.random() * 80 + 50,
+                    speed: Math.random() * 0.6 + 0.2
+                });
+            }
+        } else if (clouds.length > targetCloudCount) {
+            if (Math.random() < 0.1) clouds.pop(); // 천천히 제거
+        }
+
+        // 2. 구름 그리기
+        const cc = targetCloudColor; 
+        // 색상 적용 (부드러운 전환 없이 바로 적용해도 자연스러움)
+        ctx.fillStyle = `rgba(${cc.r}, ${cc.g}, ${cc.b}, ${cc.a})`;
+
+        for (let i = 0; i < clouds.length; i++) {
+            let c = clouds[i];
+            
+            let renderX = c.x
+            
+            // 화면 밖 무한 루프 로직 (기존 유지)
+            let modX = ((renderX % (W * 1.5)) + (W * 1.5)) % (W * 1.5) - 200;
+
             ctx.beginPath();
-            ctx.arc(c.x, c.y, c.size, 0, TWO_PI);
-            ctx.arc(c.x + c.size*0.7, c.y - c.size*0.3, c.size*0.8, 0, TWO_PI);
-            ctx.arc(c.x + c.size*1.4, c.y, c.size, 0, TWO_PI);
+            ctx.arc(modX, c.y, c.size, 0, TWO_PI);
+            ctx.arc(modX + c.size*0.7, c.y - c.size*0.3, c.size*0.8, 0, TWO_PI);
+            ctx.arc(modX + c.size*1.4, c.y, c.size, 0, TWO_PI);
             ctx.fill();
-            c.x += c.speed * (currentWeather.id === "wind" || currentWeather.id === "cloudy" ? 3 : 1);
-            if(c.x > W + c.size * 2) c.x = -c.size * 2;
-        });
+
+            // 구름 이동 (바람 불면 더 빠르게)
+            let windSpeed = (currentWeather.id === "wind" || currentWeather.id === "thunder") ? 3 : 1;
+            c.x += c.speed * windSpeed;
+        }
     }
 
     // =======================================================
@@ -2719,36 +2817,69 @@ function render() {
     
     ctx.restore();
 
-    // 몬스터 스폰 로직 (기존 if문을 이걸로 교체)
-    if (globalRenderTime % 120 === 0) {
-        let weatherId = currentWeather.id;
-        let cData = CRITTER_DB[weatherId] || CRITTER_DB["clear"];
-        let spawnChance = critters.length < 3 ? 1.0 : 0.1;
+    if (globalRenderTime % 240 === 0) {
         
-        if (cData && critters.length < 12 && Math.random() < spawnChance) {
-            let dir = Math.random() < 0.5 ? 1 : -1;
-            // ★ 테스트를 위해 거리를 500~800으로 좁힘 (너무 멀면 안 보임)
-            let rDist = 1500 + Math.random() * 500; 
-            let startX = player.x + (dir * rDist);
+        const getBiomeSimple = (x) => {
+            if (x < 25000) return "SOUTH_EDGE";
+            if (x < 50000) return "FROZEN_MOUNTAIN";
+            if (x < 75000) return "CORRUPTED";
+            if (x < 100000) return "ANCIENT_RUIN";
+            if (x < 125000) return "CLIFFS";
+            if (x < 175000) return "PLAINS";
+            if (x < 200000) return "DESERT";
+            if (x < 225000) return "BEACH";
+            if (x < 250000) return "MAGIC_FOREST";
+            if (x < 275000) return "FORGOTTEN_CITY";
+            if (x < 300000) return "FAR_LANDS";
+            return "NORTH_EDGE";
+        };
+        
+        let currentBiome = getBiomeSimple(player.x);
+        let currentWeatherId = currentWeather.id;
 
-            // 월드 경계 체크
+        // 1. 조건에 맞는 후보군 필터링
+        let candidates = CRITTER_DB.filter(mob => {
+            const cond = mob.spawnConditions;
+            const biomeMatch = cond.biomes.includes("ALL") || cond.biomes.includes(currentBiome);
+            const weatherMatch = cond.weathers.includes("ALL") || cond.weathers.includes(currentWeatherId);
+            return biomeMatch && weatherMatch;
+        });
+
+        // 2. ★ 가중치 기반 랜덤 뽑기 (Weighted Random)
+        if (candidates.length > 0 && critters.length < 12 && Math.random() < 0.3) {
+            
+            // 전체 가중치 합 계산 (spawnChance가 없으면 기본값 1.0)
+            let totalWeight = candidates.reduce((sum, c) => sum + (c.spawnChance || 1.0), 0);
+            let randomValue = Math.random() * totalWeight;
+            let selectedMobData = null;
+
+            for (let mob of candidates) {
+                let weight = mob.spawnChance || 1.0;
+                if (randomValue < weight) {
+                    selectedMobData = mob;
+                    break;
+                }
+                randomValue -= weight;
+            }
+            
+            // 안전장치
+            if (!selectedMobData) selectedMobData = candidates[0];
+
+            let dir = Math.random() < 0.5 ? 1 : -1;
+            let startX = player.x + (dir * (1200 + Math.random() * 600));
             startX = Math.max(1000, Math.min(startX, WORLD_WIDTH - 1000));
 
             const newMob = {
                 id: Date.now() + Math.random(),
                 x: startX, 
                 y: getGroundY(startX),
-                vx: 0,
-                vy: 0,
-                targetVx: 0,
-                typeData: cData, 
-                hp: cData.hp, 
-                maxHp: cData.hp, 
-                hitTime: 0, 
-                life: 3600, 
+                vx: 0, vy: 0, targetVx: 0,
+                typeData: selectedMobData,
+                hp: selectedMobData.hp,
+                maxHp: selectedMobData.hp,
+                hitTime: 0, life: 3600,
                 animTime: Math.random() * 100,
-                state: "idle",
-                spawnTimer: 0 // mobBehavior.js에서 사용하는 초기화 변수
+                state: "idle", spawnTimer: 0
             };
 
             critters.push(newMob);
@@ -2989,6 +3120,10 @@ function render() {
     renderLightning(ctx);
     renderSpawns(ctx);
     vfxParticles.updateAndDraw(ctx); 
+
+    biomeVFX.update(player.x, W, H, currentWeather.id); 
+    
+    biomeVFX.draw(ctx, W, H);
 
     // ==========================================
     // ★ 조각 연출 업데이트 및 렌더링
@@ -3570,6 +3705,25 @@ window.onload = () => {
 
     // 3. 게임 데이터 로드
     loadGame(); 
+    
+    window.addEventListener('refreshInventory', () => {
+        if (typeof renderConsumableList === 'function') {
+            renderConsumableList(consumableInv); // 최신 데이터로 다시 그리기
+        }
+    });
+
+    // 초기 구름 생성
+    for(let i=0; i<5; i++) { // 개수는 5개 정도가 적당
+        clouds.push({
+            x: Math.random() * W, 
+            y: Math.random() * H * 0.3, 
+            
+            // ★ [수정] 여기도 똑같이 키움
+            size: Math.random() * 50 + 60,
+            
+            speed: Math.random() * 0.4 + 0.1
+        });
+    }
 
     // 4. 초기 날씨 설정
     currentWeather = weathers.find(w => w.id === "clear");
@@ -3673,4 +3827,77 @@ window.setWeather = function(weatherId) {
         console.error(`❌ 존재하지 않는 날씨 ID입니다: ${weatherId}`);
         console.log("사용 가능한 ID 목록:", weathers.map(w => w.id).join(", "));
     }
+};
+
+// ========================================================
+// [개발자 치트키] 몬스터 소환
+// 사용법: F12 콘솔창에 spawnMob("id", 마리수) 입력
+// 예시: spawnMob("ice_golem", 1)  /  spawnMob("squirrel", 5)
+// ========================================================
+window.spawnMob = function(mobId, count = 1) {
+    // 1. ID로 몬스터 데이터 찾기
+    const mobData = CRITTER_DB.find(m => m.id === mobId);
+    
+    if (!mobData) {
+        console.error(`❌ [오류] "${mobId}" 라는 몹은 없습니다.`);
+        console.log("📜 소환 가능한 몹 ID 목록:", CRITTER_DB.map(m => m.id).join(", "));
+        return;
+    }
+
+    console.log(`✨ [DEV] ${mobData.name} (ID: ${mobId}) ${count}마리 소환!`);
+
+    for (let i = 0; i < count; i++) {
+        // 플레이어 근처 (앞쪽 200~600px)에 소환
+        let spawnX = player.x + 200 + (Math.random() * 400); 
+        
+        // 월드 밖으로 안 나가게 보정
+        if (spawnX > WORLD_WIDTH - 500) spawnX = player.x - 200;
+
+        const newMob = {
+            id: Date.now() + Math.random(),
+            x: spawnX, 
+            y: getGroundY(spawnX), // 땅 높이 자동 계산
+            vx: 0,
+            vy: 0,
+            targetVx: 0,
+            typeData: mobData, 
+            hp: mobData.hp,
+            maxHp: mobData.hp,
+            hitTime: 0, 
+            life: 99999, // 테스트용이라 수명 길게
+            animTime: Math.random() * 100,
+            state: "idle",
+            spawnTimer: 60 // 1초 뒤 행동 시작
+        };
+
+        critters.push(newMob);
+    }
+};
+
+// 모든 종류의 몬스터를 1마리씩 다 소환 (박물관 모드)
+window.spawnAllMobs = function() {
+    console.log("🦁 모든 몬스터 소환!");
+    CRITTER_DB.forEach((mob, index) => {
+        // 100px 간격으로 줄세우기
+        const spawnX = player.x + 200 + (index * 100);
+        
+        const newMob = {
+            id: Date.now() + Math.random(),
+            x: spawnX, 
+            y: getGroundY(spawnX),
+            vx: 0, vy: 0, targetVx: 0,
+            typeData: mob, 
+            hp: mob.hp, maxHp: mob.hp,
+            hitTime: 0, life: 99999,
+            animTime: 0,
+            state: "idle", spawnTimer: 60
+        };
+        critters.push(newMob);
+    });
+};
+
+// 현재 몹 다 지우기 (렉 걸릴 때)
+window.killAllMobs = function() {
+    critters.length = 0;
+    console.log("💀 모든 몬스터 제거 완료.");
 };
