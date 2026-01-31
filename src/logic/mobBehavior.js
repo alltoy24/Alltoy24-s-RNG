@@ -109,7 +109,7 @@ function aiGroundCharge(mob, player) {
 // [AI 2] 공중 추적형
 function aiFlyingRam(mob, player, realH) {
     const groundOffset = realH - 1080;
-    const targetY = (player.y + groundOffset) - 50; // 보정된 Y축 기준 가슴팍
+    const targetY = player.y - 50;
 
     const dist = Math.hypot(player.x - mob.x, targetY - mob.y);
     const detectRange = 800; 
@@ -193,7 +193,7 @@ export function applyMobMovement(mob, dt, realH) {
     } else {
         mob.vx *= 0.98;
         mob.vy *= 0.98;
-        const gY = getGroundY(mob.x);
+        const gY = calculateGroundY(mob.x, realH, 1.0);
         if (mob.y > gY - 50) mob.vy -= 0.5; 
     }
 
