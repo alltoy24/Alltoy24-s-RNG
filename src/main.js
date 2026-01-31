@@ -328,27 +328,13 @@ function calcLevel() {
     }
     
     // 2. ★ 핵심: 레벨에 따른 최대 체력 업데이트 (여기서 해야 함!)
-    // 레벨 1 = 100, 레벨업당 +20
-    player.maxHp = 100 + (lv - 1) * 20;
+    // 레벨 1 = 100, 레벨업당 +50
+    player.maxHp = 100 + (lv - 1) * 50;
     
     // 현재 체력이 최대 체력보다 크면 보정
     if (player.hp > player.maxHp) player.hp = player.maxHp;
 
     return lv;
-}
-
-function getExpPercent() {
-    let lv = calcLevel();
-    // 현재 레벨의 바닥 경험치
-    let currentLevelExp = 250 * Math.pow(lv - 1, 2);
-    // 다음 레벨 달성 경험치
-    let nextLevelExp = 250 * Math.pow(lv, 2);
-    
-    let numerator = totalExp - currentLevelExp;
-    let denominator = nextLevelExp - currentLevelExp;
-    
-    if (denominator <= 0) return 0;
-    return Math.min(100, Math.max(0, (numerator / denominator) * 100));
 }
 
 // ★ [누락된 함수 추가] 경험치 획득 및 레벨업 처리
@@ -2846,7 +2832,7 @@ function render() {
         });
 
         // 2. ★ 가중치 기반 랜덤 뽑기 (Weighted Random)
-        if (candidates.length > 0 && critters.length < 12 && Math.random() < 0.3) {
+        if (candidates.length > 0 && critters.length < 6 && Math.random() < 0.25) {
             
             // 전체 가중치 합 계산 (spawnChance가 없으면 기본값 1.0)
             let totalWeight = candidates.reduce((sum, c) => sum + (c.spawnChance || 1.0), 0);
@@ -3040,16 +3026,14 @@ function render() {
                         consumableInv[drop] = (consumableInv[drop] || 0) + 1;
                         spawnItemLog(drop);
 
-                        let baseXP = c.maxHp / 10;
-                        let bonusMultiplier = 1 + (c.maxHp / 5000); 
-                        let xpGain = Math.max(10, Math.floor(baseXP * bonusMultiplier));
+                        let xpGain = c.typeData.xp || 10;
                         
                         addExp(xpGain);
 
                         damageLabels.push({
                             x: c.x - cameraX, 
                             y: c.y - currentParallaxY * 50 - 140,
-                            text: `+${xpGain.toLocaleString()} XP`,
+                            text: `+${xpGain.toLocaleString()} XP`, // 텍스트
                             life: 2.5, vy: -0.5, scale: 1.3,
                             customColor: "#00E5FF"
                         });
@@ -3078,34 +3062,36 @@ function render() {
                 if (!GRAPHICS.simpleProjectiles) vfxParticles.spawnExplosion(c.x - cameraX, c.y - currentParallaxY * 50, c.typeData.color, 5, 8);
                 critters.splice(i, 1); continue;
         }
-        // [수정] 몹 UI 렌더링 (이름표 + HP바) - 높이 자동 조절 적용
         if (c.x > cameraX - 50 && c.x < cameraX + W + 50) {
             let bounce = (c.typeData.moveType === "hop") ? Math.abs(Math.sin(c.animTime)) * 10 : 0;
             
-            // ★ 여기가 핵심! 기존에 -c.typeData.size - 25 라고 되어있던 부분을
-            // DB에 설정한 uiHeight 배율을 사용하도록 수정합니다.
+            // UI 높이 계산
             let hRatio = c.typeData.uiHeight || 3.0;
             let uiY = -(c.typeData.size * hRatio); 
             
             ctx.save();
             ctx.translate(c.x, c.y - bounce);
 
-            // 1. 이름표 (HP바보다 15픽셀 더 위)
-            ctx.fillStyle = "white"; ctx.shadowBlur = 3; ctx.shadowColor = "black";
-            ctx.font = "bold 12px Noto Sans KR"; ctx.textAlign = "center";
-            ctx.fillText(c.typeData.name, 0, uiY - 15); 
-            ctx.shadowBlur = 0;
+            // 1. 이름표 그리기: 삭제됨 (요청사항 반영)
+            // 데이터(c.typeData.name)는 남아있지만 화면엔 안 그림
 
-            // 2. HP 바
-            let hpPct = Math.max(0, c.hp / c.maxHp);
-            ctx.fillStyle = "rgba(0,0,0,0.6)"; 
-            ctx.fillRect(-15, uiY, 30, 4); // 배경
-            ctx.fillStyle = hpPct > 0.4 ? "#38ef7d" : "#ff416c"; 
-            ctx.fillRect(-15, uiY, 30 * hpPct, 4); // 잔량
+            // 2. HP 바 (체력이 깎였을 때만 표시)
+            if (c.hp < c.maxHp) {
+                let hpPct = Math.max(0, c.hp / c.maxHp);
+                
+                // 배경 (반투명 검정)
+                ctx.fillStyle = "rgba(0,0,0,0.6)"; 
+                ctx.fillRect(-15, uiY, 30, 4); 
 
-            // 3. 몬스터 본체
+                // 체력 (초록 -> 빨강)
+                ctx.fillStyle = hpPct > 0.4 ? "#38ef7d" : "#ff416c"; 
+                ctx.fillRect(-15, uiY, 30 * hpPct, 4); 
+            }
+
+            // 3. 몬스터 본체 그리기
             if (c.vx < 0) ctx.scale(-1, 1);
             drawCritter(ctx, c, globalRenderTime);
+            
             ctx.restore();
             
             c.screenX = c.x - cameraX; 
@@ -3602,7 +3588,7 @@ function startRoll() {
     fakeTargetAura = null;
     
     // ★ [오류 해결 포인트] fakeChance 변수를 여기서 다시 정의해줍니다.
-    let fakeChance = isFeverTime ? 0.005 : 0.0025; 
+    let fakeChance = isFeverTime ? 0.001 : 0.0002; 
 
     // 가짜 연출 로직 (1/1000 확률 정도로 글리치 발생)
     if (currentResult.chanceX <= 25 && Math.random() < fakeChance) {

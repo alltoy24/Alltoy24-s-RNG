@@ -391,5 +391,40 @@ export function drawCritter(ctx, c, globalRenderTime) {
     const renderFn = MOB_RENDERERS[rendererKey] || MOB_RENDERERS[c.typeData.drop] || drawDefault;
     renderFn(ctx, size, baseColor, time, fastTime, getColor);
 
+    if (c.typeData.aiType === "glitch_chaos" && c.state === "system_crash" && c.targetX !== undefined) {
+        
+        // 현재 몬스터 위치(0,0) 기준으로 타겟 위치와의 거리 계산
+        // (drawCritter는 이미 translate가 되어 있으므로 상대 좌표를 써야 함)
+        let relX = c.targetX - c.x;
+        let relY = c.targetY - c.y;
+
+        ctx.save();
+        ctx.translate(relX, relY); // 타겟 위치로 이동
+
+        // 1. 경고 박스 (깜빡임)
+        let opacity = Math.abs(Math.sin(globalRenderTime * 0.5)) * 0.5 + 0.2;
+        ctx.fillStyle = `rgba(255, 0, 60, ${opacity})`; // 붉은색
+        ctx.strokeStyle = "#FF003C";
+        ctx.lineWidth = 2;
+
+        // 크기 80x80 영역 표시
+        ctx.fillRect(-40, -40, 80, 80);
+        ctx.strokeRect(-40, -40, 80, 80);
+
+        // 2. 텍스트 표시
+        ctx.fillStyle = "#FFF";
+        ctx.font = "bold 12px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("⚠ SYSTEM CRASH", 0, -50);
+        
+        // 3. X 표시 (타겟 지점)
+        ctx.beginPath();
+        ctx.moveTo(-20, -20); ctx.lineTo(20, 20);
+        ctx.moveTo(20, -20); ctx.lineTo(-20, 20);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
     ctx.restore();
 }

@@ -34,7 +34,125 @@ export function updateMobAI(mob, player, realH) {
         case "teleport_ambush":   aiTeleportAmbush(mob, player); break;
         case "flee_shooter":      aiFleeShooter(mob, player); break;
         case "slime_jump":        aiSlimeJump(mob, player); break;
+        case "glitch_chaos": aiGlitchChaos(mob, player); break;
         default:              aiWander(mob); break; 
+    }
+}
+
+function aiGlitchChaos(mob, player) {
+    // 1. 플레이어가 죽었으면 더 이상 괴롭히지 않음 (티배깅 모드)
+    if (player.isDead) {
+        mob.state = "idle";
+        mob.debugText = "USER_DISCONNECTED";
+        // 제자리에서 위아래로 둥둥 떠다님
+        mob.vy = Math.sin(Date.now() * 0.005) * 0.5;
+        // 가끔 랜덤 텔레포트로 렉 걸린 척함
+        if (Math.random() < 0.02) {
+            mob.x += (Math.random() - 0.5) * 50;
+        }
+        return; 
+    }
+
+    const dist = Math.abs(player.x - mob.x);
+    const detectRange = 800; 
+
+    if (!mob.state) mob.state = "idle";
+    mob.debugText = `ERROR: ${mob.state}`;
+
+    mob.vy = Math.sin(Date.now() * 0.1) * 0.5; // 기본 부유
+
+    // 1. [대기] IDLE
+    if (mob.state === "idle") {
+        if (mob.timer === undefined) mob.timer = 30;
+        mob.timer--;
+
+        if (dist < detectRange) {
+            mob.state = "lag_chase";
+            mob.timer = 0;
+        } else if (mob.timer <= 0) {
+            mob.x += (Math.random() - 0.5) * 100;
+            mob.y += (Math.random() - 0.5) * 50;
+            mob.timer = 30 + Math.random() * 30;
+        }
+    }
+
+    // 2. [랙 추격] LAG CHASE
+    else if (mob.state === "lag_chase") {
+        if (mob.timer === undefined) mob.timer = 20;
+        mob.timer--;
+
+        if (dist < 200) { // 공격 사거리 진입
+            // 50% 확률로 패턴 분기
+            mob.state = Math.random() < 0.5 ? "spam_teleport" : "system_crash";
+            
+            // ★ [핵심] 공격 시작 전 변수 초기화
+            mob.timer = 0;
+            mob.chargeTime = undefined; // 크래시용 타이머 초기화
+            mob.targetX = undefined;    // 타겟 좌표 초기화
+            return;
+        }
+
+        if (mob.timer <= 0) {
+            let dir = (player.x > mob.x) ? 1 : -1;
+            mob.x += dir * (80 + Math.random() * 40);
+            mob.y += (player.y - 50 - mob.y) * 0.2; 
+            mob.timer = 15 + Math.random() * 15; 
+        }
+    }
+
+    // 3. [패턴 A] 무작위 텔레포트 (SPAM)
+    else if (mob.state === "spam_teleport") {
+        if (mob.timer === undefined) mob.timer = 60;
+        mob.timer--;
+
+        if (mob.timer % 4 === 0) {
+            let angle = Math.random() * Math.PI * 2;
+            let radius = 100 + Math.random() * 100;
+            mob.x = player.x + Math.cos(angle) * radius;
+            mob.y = (player.y - 50) + Math.sin(angle) * radius;
+        }
+
+        if (mob.timer <= 0) {
+            mob.state = "cooldown";
+            mob.timer = 60;
+        }
+    }
+
+    // 4. [패턴 B] 시스템 크래시 (CRASH) - 경고 후 타격
+    else if (mob.state === "system_crash") {
+        // 첫 진입 시 타겟 고정 (Lock-on)
+        if (mob.chargeTime === undefined) {
+            mob.chargeTime = 90; // 1.5초간 경고 (피할 시간 줌)
+            
+            // ★ 현재 플레이어 위치를 '기억'함 (따라가지 않음)
+            mob.targetX = player.x;
+            mob.targetY = player.y - 40; 
+        }
+        
+        mob.chargeTime--;
+
+        // 본체는 제자리에서 심하게 떨림 (렉 걸린 듯)
+        mob.x += (Math.random() - 0.5) * 10; 
+        mob.y += (Math.random() - 0.5) * 10;
+        mob.debugText = `FATAL ERROR (${Math.ceil(mob.chargeTime/60)})`;
+
+        if (mob.chargeTime <= 0) {
+            // ★ 기억해둔 위치로 순간이동 (플레이어가 피했으면 빗나감)
+            mob.x = mob.targetX;
+            mob.y = mob.targetY;
+            
+            // 쿨타임
+            mob.state = "cooldown";
+            mob.timer = 120; // 2초간 멍때림 (딜 타임 제공)
+            mob.chargeTime = undefined;
+            mob.targetX = undefined; // 타겟 해제
+        }
+    }
+
+    // 5. [쿨타임] COOLDOWN
+    else if (mob.state === "cooldown") {
+        mob.timer--;
+        if (mob.timer <= 0) mob.state = "lag_chase";
     }
 }
 
@@ -431,6 +549,13 @@ function aiFleeShooter(mob, player) {
 
 export function applyMobMovement(mob, dt, realH) {
     const mType = mob.typeData.moveType || "walk";
+
+    if (mob.typeData.aiType === "glitch_chaos") {
+        // 월드 경계만 체크
+        if (mob.x < 100) mob.x = 100;
+        if (mob.x > 324900) mob.x = 324900;
+        return; // 여기서 함수 종료! (중력/마찰력 적용 안 함)
+    }
     
     // AI 속도 적용 (슬라임 제외)
     if (mob.typeData.aiType !== "slime_jump" && mob.state !== "charge" && mob.state !== "braking" && mob.state !== "prep") {
