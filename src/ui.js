@@ -1,6 +1,7 @@
 import { allAuras } from './data/auras.js';
 import { gearDB, consumableDB, potionRecipes } from './data/items.js';
 import { GRAPHICS } from './settings.js';
+import { setBGMVolume, setSFXVolume } from './audioManager.js'; // ★ import 추가 필요
 
 const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -25,6 +26,18 @@ function updateTabStyles() {
             btn.classList.remove('active');
         }
     });
+}
+
+export function updateAudioSetting(type, value) {
+    const vol = value / 100; // 0 ~ 100 -> 0.0 ~ 1.0 변환
+
+    if (type === 'bgm') {
+        document.getElementById('bgm-vol-label').innerText = `${value}%`;
+        setBGMVolume(vol);
+    } else if (type === 'sfx') {
+        document.getElementById('sfx-vol-label').innerText = `${value}%`;
+        setSFXVolume(vol);
+    }
 }
 
 // 1. 프로필 업데이트

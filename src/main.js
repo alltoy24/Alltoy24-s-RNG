@@ -32,6 +32,7 @@ import {
     renderQuickBar, 
     spawnItemLog, 
     setUIVisibility,
+    updateAudioSetting,
     // ▼ 아래 함수들이 없어서 에러가 났던 겁니다. 꼭 추가하세요!
     updateSkipThreshold,
     updateAutoThresholds,
@@ -40,7 +41,7 @@ import {
 import { 
     playSound, stopSound, bgmPlayer, weatherSfxPlayer, 
     smoothAudioTransition, fadeOutBGM, restoreBGM,
-    COMBAT_SFX
+    COMBAT_SFX, setBGMVolume, setSFXVolume
 } from './audioManager.js';
 import { BiomeManager } from './logic/biomeManager.js'; // 1. 클래스 가져오기
 import { drawCritter } from './graphics/mobRenderer.js'; // ★ 이거 추가!
@@ -941,6 +942,10 @@ function saveGame() {
             consumableInv, 
             equippedAuraName, 
             graphicsSettings: GRAPHICS, 
+            audioSettings: {
+                bgm: document.getElementById("bgm-slider").value,
+                sfx: document.getElementById("sfx-slider").value
+            },
             // ▼ 여기가 오타 났던 부분 수정됨
             skipThreshold: document.getElementById("skip-slider").value, 
             autoScrapVal: document.getElementById("auto-scrap-slider").value, 
@@ -1055,6 +1060,27 @@ function loadGame() {
             // [변경] 여기서 handleUpdateAuto 래퍼 함수를 부릅니다.
             if (typeof handleUpdateAuto === 'function') {
                 handleUpdateAuto();
+            }
+
+            if (data.audioSettings) {
+                const bgmVal = data.audioSettings.bgm || 50;
+                const sfxVal = data.audioSettings.sfx || 50;
+
+                // 1. 슬라이더 UI 갱신
+                const bgmSlider = document.getElementById("bgm-slider");
+                const sfxSlider = document.getElementById("sfx-slider");
+                if (bgmSlider) bgmSlider.value = bgmVal;
+                if (sfxSlider) sfxSlider.value = sfxVal;
+
+                // 2. 텍스트 라벨 갱신
+                const bgmLabel = document.getElementById("bgm-vol-label");
+                const sfxLabel = document.getElementById("sfx-vol-label");
+                if (bgmLabel) bgmLabel.innerText = `${bgmVal}%`;
+                if (sfxLabel) sfxLabel.innerText = `${sfxVal}%`;
+
+                // 3. 실제 볼륨 적용 (audioManager 호출)
+                setBGMVolume(bgmVal / 100);
+                setSFXVolume(sfxVal / 100);
             }
 
             if (data.graphicsSettings) {
@@ -4221,6 +4247,7 @@ window.toggleEquipAura = toggleEquipAura;
 window.scrapAura = scrapAura;
 window.toggleEquip = toggleEquip;
 window.unequipGear = unequipGear;
+window.updateAudioSetting = updateAudioSetting;
 
 window.startRoll = startRoll;
 window.toggleAutoRoll = toggleAutoRoll;
@@ -4230,7 +4257,39 @@ window.openNicknameEdit = openNicknameEdit;
 // 2. ui.js에서 가져온 설정 함수들 연결 (래퍼 함수)
 window.updateSkipThreshold = handleUpdateSkip;
 window.updateAutoThresholds = handleUpdateAuto;
-window.updateGraphicSetting = updateGraphicSetting;
+// 1. 파티클 개수 재계산 함수 (새로 추가)
+function recalculateParticleCount() {
+    const pCounts = { 
+        "thunder": 1500, "rain": 800, "snow": 600, 
+        "wind": 100, "foggy": 15, "glitch": 1000, 
+        "heatwave": 0 
+    };
+    let baseCount = pCounts[currentWeather.id] || 0;
+    // GRAPHICS 객체는 settings.js나 전역에서 가져온 것을 사용
+    let density = (typeof GRAPHICS !== 'undefined') ? GRAPHICS.weatherDensity : 1.0;
+    
+    // 목표 파티클 개수 즉시 갱신
+    targetParticleCount = baseCount * density;
+}
+
+// 2. ui.js의 설정을 덮어쓰면서 로직 추가 (수정됨)
+window.updateGraphicSetting = function(key, value) {
+    // 설정값 업데이트
+    if (typeof GRAPHICS !== 'undefined') GRAPHICS[key] = value;
+
+    // 날씨 밀도(weatherDensity)를 건드렸을 때만 즉시 재계산
+    if (key === 'weatherDensity') {
+        const label = document.getElementById('weather-val-label');
+        if (label) label.innerText = Math.round(value * 100) + "%";
+        
+        // ★ 핵심: 여기서 재계산 함수를 호출하여 즉시 반영
+        recalculateParticleCount(); 
+    }
+    // 체크박스류 처리
+    if (key.startsWith('show') || key.startsWith('simple')) {
+         // 체크박스 값 갱신은 위에서 GRAPHICS[key] = value로 처리됨
+    }
+};
 
 // ========================================================
 // ★ [줌 차단] 브라우저 기본 확대/축소 막기
