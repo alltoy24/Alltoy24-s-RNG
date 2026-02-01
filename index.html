@@ -1056,8 +1056,13 @@
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <label><input type="checkbox" id="chk-grass" checked onchange="updateGraphicSetting('showGrass', this.checked)"> 풀 렌더링</label>
+                        <label><input type="checkbox" id="chk-trees" checked onchange="updateGraphicSetting('showTrees', this.checked)"> 나무 렌더링</label>
                         <label><input type="checkbox" id="chk-clouds" checked onchange="updateGraphicSetting('showClouds', this.checked)"> 구름 렌더링</label>
                         <label><input type="checkbox" id="chk-others" checked onchange="updateGraphicSetting('showOtherAttacks', this.checked)"> 타인 공격 표시</label>
+                        
+                        <label><input type="checkbox" id="chk-biome-vfx" checked onchange="updateGraphicSetting('showBiomeVFX', this.checked)"> 바이옴 이펙트</label>
+                        <label><input type="checkbox" id="chk-ambient" checked onchange="updateGraphicSetting('showAmbientParticles', this.checked)"> 배경 반짝이</label>
+                        <label><input type="checkbox" id="chk-stars" checked onchange="updateGraphicSetting('showStars', this.checked)"> 별 렌더링</label>
                         <label><input type="checkbox" id="chk-proj" onchange="updateGraphicSetting('simpleProjectiles', this.checked)"> 공격 간소화</label>
                         <label><input type="checkbox" id="chk-aura" onchange="updateGraphicSetting('simpleAuras', this.checked)"> 오라 간소화</label>
                         <label><input type="checkbox" id="chk-mob" onchange="updateGraphicSetting('simpleMobs', this.checked)"> 몹 간소화</label>

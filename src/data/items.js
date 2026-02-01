@@ -242,31 +242,96 @@ export const consumableDB = {
     "thunder": { id: "thunder", name: "번개 버섯", desc: "15초간 행운 +200%", color: "#FFEB3B", type: "luck", val: 2.0, duration: 15, host: "grass" },
     "foggy": { id: "foggy", name: "안개꽃", desc: "10초간 행운/속도 +150%", color: "#CFD8DC", type: "both", val: 1.5, duration: 10, host: "grass" },
 
-    // [B] 몬스터 전용 전리품 (제작 핵심 재료)
-    "nut_light": { id: "nut_light", name: "태양의 견과", desc: "고소한 빛의 정수 (재료)", color: "#FFD54F", isMaterial: true },
-    "frog_skin": { id: "frog_skin", name: "미끌미끌한 가죽", desc: "습기를 머금은 가죽 (재료)", color: "#4CAF50", isMaterial: true },
-    "rabbit_fur": { id: "rabbit_fur", name: "폭신한 토끼털", desc: "부드러운 냉기의 털 (재료)", color: "#FAFAFA", isMaterial: true },
-    "spirit_wing": { id: "spirit_wing", name: "정령의 날개깃", desc: "무게가 없는 깃털 (재료)", color: "#B2DFDB", isMaterial: true },
-    "volt_scale": { id: "volt_scale", name: "정전기 비늘", desc: "찌릿한 전기가 흐르는 비늘 (재료)", color: "#FFEB3B", isMaterial: true },
-    "fairy_dust": { id: "fairy_dust", name: "요정의 가루", desc: "차원을 넘나드는 가루 (재료)", color: "#F48FB1", isMaterial: true },
-    "shadow_beak": { id: "shadow_beak", name: "그림자 부리", desc: "빛을 삼키는 부리 (재료)", color: "#424242", isMaterial: true },
-    "blood_fang": { id: "blood_fang", name: "핏빛 송곳니", desc: "생명력을 갈구하는 이빨 (재료)", color: "#B71C1C", isMaterial: true },
-    "core_glitch": { id: "core_glitch", name: "손상된 코어", desc: "데이터가 파손된 핵 (재료)", color: "#00E5FF", isMaterial: true },
-
+    // ★ [추가] 여기가 없어서 스폰이 안 됐던 겁니다!
+    "heatwave": { id: "heatwave", name: "선인장 꽃", desc: "20초간 행운 +250%", color: "#FF4081", type: "luck", val: 2.5, duration: 20, host: "tree" }, // 선인장(tree)에서 생성
+    "glitch": { id: "glitch", name: "오류 조각", desc: "10초간 행운/속도 +500%", color: "#00E5FF", type: "both", val: 5.0, duration: 10, host: "grass" },
+    "eclipse": { id: "eclipse", name: "검은 태양의 파편", desc: "30초간 행운 +300%", color: "#212121", type: "luck", val: 3.0, duration: 30, host: "grass" },
+    "blood-moon": { id: "blood-moon", name: "붉은 달의 눈물", desc: "30초간 속도 +300%", color: "#D32F2F", type: "speed", val: 3.0, duration: 30, host: "tree" },
+    // [Tier 1]
+    "nut_light": { 
+        id: "nut_light", name: "태양의 견과", 
+        desc: "따스한 햇살을 머금은 견과류. (재료)", 
+        color: "#FFD54F", isMaterial: true 
+    },
+    "frog_skin": { 
+        id: "frog_skin", name: "미끌미끌한 가죽", 
+        desc: "방수력이 뛰어난 개구리 가죽. (재료)", 
+        color: "#81C784", isMaterial: true 
+    },
     "slime_gel": { 
-        id: "slime_gel", 
-        name: "슬라임 진액", 
-        desc: "끈적끈적한 점액질. 가장 기초적인 연금술 재료.", 
-        color: "#76FF03", // 라임색
-        isMaterial: true 
+        id: "slime_gel", name: "슬라임 진액", 
+        desc: "끈적끈적한 점액질. 기초 연금술 재료. (재료)", 
+        color: "#76FF03", isMaterial: true 
     },
 
+    // [Tier 2]
+    "volt_scale": { 
+        id: "volt_scale", name: "정전기 비늘", 
+        desc: "찌릿한 전류가 흐르는 도마뱀 비늘. (재료)", 
+        color: "#FBC02D", isMaterial: true 
+    },
+    "fiber": { 
+        id: "fiber", name: "질긴 섬유", 
+        desc: "회전초에서 얻은 마른 식물 줄기. (재료)", 
+        color: "#8D6E63", isMaterial: true 
+    },
+
+    // [Tier 3]
+    "spirit_wing": { 
+        id: "spirit_wing", name: "정령의 날개깃", 
+        desc: "중력을 거스르는 신비한 깃털. (재료)", 
+        color: "#B2DFDB", isMaterial: true 
+    },
+    "rabbit_fur": { 
+        id: "rabbit_fur", name: "폭신한 토끼털", 
+        desc: "보온성이 뛰어난 부드러운 털. (재료)", 
+        color: "#FAFAFA", isMaterial: true 
+    },
+    "stone_core": { 
+        id: "stone_core", name: "원소의 핵", 
+        desc: "단단하게 응축된 차가운 마력의 돌. (재료)", 
+        color: "#81D4FA", isMaterial: true 
+    },
+    "ectoplasm": { 
+        id: "ectoplasm", name: "엑토플라즘", 
+        desc: "만질 수 없는 유령의 잔재. (재료)", 
+        color: "#B0BEC5", isMaterial: true 
+    },
+    "fairy_dust": { 
+        id: "fairy_dust", name: "요정의 가루", 
+        desc: "반짝이는 차원의 가루. (재료)", 
+        color: "#F48FB1", isMaterial: true 
+    },
+
+    // [Tier 4]
+    "ancient_gear": { 
+        id: "ancient_gear", name: "고대 톱니바퀴", 
+        desc: "잊혀진 문명의 기술로 만들어진 부품. (재료)", 
+        color: "#A1887F", isMaterial: true 
+    },
+
+    // [Tier 5 - 보스급]
+    "shadow_beak": { 
+        id: "shadow_beak", name: "그림자 부리", 
+        desc: "빛을 삼키는 칠흑 같은 부리. (재료)", 
+        color: "#212121", isMaterial: true 
+    },
+    "blood_fang": { 
+        id: "blood_fang", name: "핏빛 송곳니", 
+        desc: "생명력을 갈구하는 붉은 이빨. (재료)", 
+        color: "#D32F2F", isMaterial: true 
+    },
+    "core_glitch": { 
+        id: "core_glitch", name: "손상된 코어", 
+        desc: "데이터가 파손된 정체불명의 핵. (재료)", 
+        color: "#00E5FF", isMaterial: true 
+    },
+
+    // [Tier 6 - 잭팟]
     "gold_nugget": { 
-        id: "gold_nugget", 
-        name: "순금 덩어리", 
-        desc: "놀라운 광채를 뿜는 순도 99.9%의 금. (재료)", 
-        color: "#FFD700", // 황금색
-        isMaterial: true 
+        id: "gold_nugget", name: "순금 덩어리", 
+        desc: "압도적인 가치를 지닌 순금. (환금용)", 
+        color: "#FFD700", isMaterial: true 
     },
 
     // [C] 제작된 물약 (몬스터 재료 기반) - 30여종

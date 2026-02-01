@@ -162,19 +162,94 @@ const drawTumbleweed = (ctx, size, color, time, fastTime, getColor) => {
     ctx.restore();
 };
 
-// 11. 얼음 골렘 (눈 삭제)
-const drawIceGolem = (ctx, size, color, time, fastTime, getColor) => {
-    const walk = Math.sin(time * 0.5) * size * 0.3;
-    ctx.fillStyle = getColor(color); 
-    ctx.fillRect(-size*0.8, size*0.5 + walk, size*0.6, size);
-    ctx.fillRect(size*0.2, size*0.5 - walk, size*0.6, size);
+const drawIceGolem = (ctx, size, color, time, fastTime, getColor, state) => {
+    // drawCritter에서 state를 넘겨받아야 합니다 (아래 drawCritter 수정 필수)
+    const s = size * 1.8;
+    
+    // ★ [애니메이션 분기]
+    // 기본 걷기 (느림)
+    let legSpeed = 0.4;
+    let armAngle = 0;
+    
+    // 1. 돌진 중일 때: 다리 엄청 빨리 움직임
+    if (state === "charge") {
+        legSpeed = 2.0; // 5배 배속 (다다다다)
+    }
+    // 2. 내려치기 준비 (팔을 번쩍 듦)
+    else if (state === "prep_smash") {
+        armAngle = -Math.PI * 0.8; // 만세 자세 (위로 140도)
+    }
+    // 3. 내려치기 (팔을 바닥으로)
+    else if (state === "smash") {
+        armAngle = Math.PI * 0.3; // 아래로 찍음
+    }
 
-    // 육각형 몸통
+    const walk = Math.sin(time * legSpeed) * 0.2; 
+
+    ctx.translate(0, -s * 0.6);
+
+    // --- 다리 (Legs) ---
+    ctx.fillStyle = getColor(color);
+    ctx.save(); ctx.translate(-s * 0.4, s * 0.5); ctx.rotate(walk); ctx.fillRect(-s * 0.25, 0, s * 0.5, s * 0.7); ctx.restore();
+    ctx.save(); ctx.translate(s * 0.4, s * 0.5); ctx.rotate(-walk); ctx.fillRect(-s * 0.25, 0, s * 0.5, s * 0.7); ctx.restore();
+
+    // --- 몸통 ---
+    let iceGrad = ctx.createLinearGradient(-s, -s*2, s, s);
+    iceGrad.addColorStop(0, "#E1F5FE"); 
+    iceGrad.addColorStop(0.5, color);   
+    iceGrad.addColorStop(1, "#01579B"); 
+    ctx.fillStyle = getColor(iceGrad);
+    
     ctx.beginPath();
-    ctx.moveTo(-size, -size); ctx.lineTo(size, -size);
-    ctx.lineTo(size*1.2, 0); ctx.lineTo(size, size);
-    ctx.lineTo(-size, size); ctx.lineTo(-size*1.2, 0);
-    ctx.fill();
+    ctx.moveTo(-s * 1.2, -s * 1.6); ctx.lineTo(s * 1.2, -s * 1.6);
+    ctx.lineTo(s * 0.7, s * 0.6); ctx.lineTo(-s * 0.7, s * 0.6);
+    ctx.closePath(); ctx.fill();
+
+    // 어깨 얼음 뿔
+    ctx.fillStyle = getColor("#B3E5FC");
+    ctx.beginPath(); ctx.moveTo(-s*1.2, -s*1.6); ctx.lineTo(-s*1.6, -s*2.2); ctx.lineTo(-s*0.8, -s*1.6); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(s*1.2, -s*1.6); ctx.lineTo(s*1.6, -s*2.2); ctx.lineTo(s*0.8, -s*1.6); ctx.fill();
+
+    // --- 팔 (Arms) : 상태에 따라 각도 변화 ---
+    ctx.fillStyle = getColor(color);
+    
+    // 왼쪽 팔
+    ctx.save();
+    ctx.translate(-s * 1.3, -s * 1.2); 
+    ctx.rotate(armAngle - walk * 1.5); // 기본 흔들림 + 공격 각도
+    ctx.beginPath();
+    ctx.moveTo(0,0); ctx.lineTo(-s*0.3, s*1.5); ctx.lineTo(s*0.5, s*1.5); ctx.lineTo(s*0.2, 0); ctx.fill();
+    ctx.translate(0, s*1.5); ctx.beginPath(); for(let i=0; i<6; i++) { let a = i*Math.PI/3; ctx.lineTo(Math.cos(a)*s*0.4, Math.sin(a)*s*0.4); } ctx.fill();
+    ctx.restore();
+
+    // 오른쪽 팔
+    ctx.save();
+    ctx.translate(s * 1.3, -s * 1.2);
+    ctx.rotate(armAngle + walk * 1.5); // 오른쪽도 같은 각도로 (양손 찍기) 혹은 반대
+    // 스매시일 땐 양손을 같이 듬
+    if (state === "prep_smash" || state === "smash") {
+         // 양손 동기화
+         ctx.rotate(- (armAngle + walk * 1.5) + (armAngle + walk * 1.5)); // 회전 초기화 트릭 대신 그냥 값 대입
+         // 다시 회전 설정: 양팔 벌려 만세
+         ctx.rotate(-armAngle + walk * 1.5); 
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(0,0); ctx.lineTo(-s*0.2, s*1.5); ctx.lineTo(s*0.6, s*1.5); ctx.lineTo(s*0.3, 0); ctx.fill();
+    ctx.translate(0.2*s, s*1.5); ctx.beginPath(); for(let i=0; i<6; i++) { let a = i*Math.PI/3; ctx.lineTo(Math.cos(a)*s*0.4, Math.sin(a)*s*0.4); } ctx.fill();
+    ctx.restore();
+
+    // --- 코어 ---
+    // 돌진 준비/내려치기 준비 중일 때 붉게 빛남 (경고)
+    let coreColor = (state === "prep_charge" || state === "prep_smash") ? "#FF5252" : "#00E5FF";
+    
+    ctx.shadowBlur = 10; ctx.shadowColor = coreColor; 
+    ctx.fillStyle = getColor("#E0F7FA");
+    ctx.beginPath(); ctx.moveTo(0, -s * 1.0); ctx.lineTo(s * 0.25, -s * 0.7); ctx.lineTo(0, -s * 0.4); ctx.lineTo(-s * 0.25, -s * 0.7); ctx.closePath(); ctx.fill();
+    
+    ctx.fillStyle = getColor(coreColor); 
+    ctx.beginPath(); ctx.arc(0, -s*0.7, s*0.1, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
 };
 
 // 12. 유적 파수꾼 (눈 삭제 -> 고대 문양만)
@@ -208,6 +283,7 @@ const drawDefault = (ctx, size, color, time, fastTime, getColor) => {
 const drawSimpleSlime = (ctx, size, color, time, fastTime, getColor) => {
     // 1. 본체 (젤리 질감)
     ctx.fillStyle = getColor(color);
+    ctx.translate(0, 10);
     
     // 약간 투명하게 (슬라임 느낌)
     if (color !== "#212121" && color !== "#263238") { // 다크매터/오일은 불투명
@@ -268,9 +344,6 @@ export const MOB_RENDERERS = {
     "slime_gold": drawSimpleSlime
 };
 
-// ========================================================
-// [3] 메인 그리기 함수
-// ========================================================
 export function drawCritter(ctx, c, globalRenderTime) {
     const size = c.typeData.size || 15;
     const isHit = c.hitTime > 0;
@@ -287,63 +360,43 @@ export function drawCritter(ctx, c, globalRenderTime) {
     ctx.save();
 
     // 1. 기본 위치 잡기 (바닥 기준)
-    // ----------------------------------------------------
-    // 슬라임이 아닌 일반 몹들의 바운스 (다람쥐, 토끼 등)
     let bounce = 0;
     if (c.typeData.aiType !== "slime_jump") {
         if (c.typeData.moveType === "hop") bounce = Math.abs(Math.sin(c.animTime)) * size * 0.3;
         if (c.typeData.moveType === "float") bounce = Math.sin(c.animTime * 0.5) * size * 0.2;
     }
     
-    // 일단 바닥(0)에서 몬스터 크기만큼 위로 올리고(-size), 바운스 적용
-    // 나중에 scale을 먹일 때 바닥을 기준으로 하기 위해 좌표계를 바닥에 둡니다.
     ctx.translate(0, 0); 
 
-    // 2. ★ [핵심] 슬라임 전용 젤리 변형 (Squash & Stretch)
-    // ----------------------------------------------------
+    // 2. 슬라임 젤리 변형 (스쿼시 앤 스트레치)
     let scaleX = 1.0;
     let scaleY = 1.0;
 
     if (c.typeData.aiType === "slime_jump") {
-        // (1) 준비 동작: 납작해짐 (찐빵)
         if (c.state === "prepare") {
-            // 타이머(90 -> 0)가 줄어들수록 더 납작해짐 (최대 0.6배)
             let progress = (90 - c.timer) / 90; 
             let squash = progress * 0.4; 
-            // 부들부들 떨림 효과
             let shake = Math.sin(globalRenderTime * 2.5) * 0.05;
-            
             scaleX = 1.0 + squash + shake;
             scaleY = 1.0 - squash - shake;
         } 
-        // (2) 공중: 길쭉해짐 (속도감)
         else if (c.state === "air") {
-            // 위로 솟구칠 때 더 길어짐
             let stretch = Math.min(0.5, Math.abs(c.vy) * 0.03);
             scaleX = 0.9 - stretch;
             scaleY = 1.1 + stretch;
         } 
-        // (3) 착지: 띠용~ 하고 젤리처럼 출렁임
         else if (c.state === "land") {
-            let recovery = c.timer / 30; // 1.0 -> 0.0
+            let recovery = c.timer / 30; 
             scaleX = 1.0 + (recovery * 0.3);
             scaleY = 1.0 - (recovery * 0.3);
         }
     }
 
-    // ★ 변형 적용 순서가 중요합니다!
-    // 1. 위로 살짝 띄움 (기본 바운스)
     ctx.translate(0, -bounce);
-    // 2. 스케일 적용 (찌그러트리기)
     ctx.scale(scaleX, scaleY);
-    // 3. 원래 크기만큼 위로 올려서 그림 (발이 바닥에 붙어있게)
-    ctx.translate(0, -size);
+    ctx.translate(0, -size); // 발 밑을 기준점으로
 
-
-    // 3. 그리기 실행
-    // ----------------------------------------------------
-    
-    // [간소화 모드]
+    // 3. 그리기 실행 (간소화 모드)
     if (isSimple) {
         ctx.fillStyle = isHit ? "#FFFFFF" : baseColor;
         ctx.strokeStyle = ctx.fillStyle;
@@ -353,76 +406,112 @@ export function drawCritter(ctx, c, globalRenderTime) {
         return;
     }
 
-    // [일반 모드]
+    // 일반 모드 설정
     ctx.shadowBlur = isHit ? 0 : 10;
     ctx.shadowColor = baseColor;
-
     const getColor = (normalColor) => isHit ? "#FFFFFF" : normalColor;
 
-    // 좌우 반전 (속도 기준)
-    // 슬라임은 준비 동작 중에는 타겟(플레이어)을 바라봄
+    // 4. 슬라임 전용 좌우 반전 (준비 동작 중엔 타겟 바라봄)
     if (c.state === "prepare") {
         if (!c.facingRight) ctx.scale(-1, 1);
     } else {
         if (c.vx < -0.1) ctx.scale(-1, 1);
     }
 
+    // [얼음 골렘 스매시 준비 이펙트] (몸이 부들부들 떨림)
+    if (c.typeData.aiType === "ice_golem" && c.state === "prep_smash") {
+        ctx.translate((Math.random()-0.5)*3, (Math.random()-0.5)*3);
+    }
+
     // ========================================================
-    // ★ [FIX] 방향 전환 로직 (AI 우선권 부여)
+    // ★ [중요] 방향 전환 로직 (AI 우선권)
+    // 이 코드가 실행된 후에는 X축 양수(+) 방향이 무조건 몹의 '앞'입니다.
     // ========================================================
     let shouldFlip = false;
-
-    // 1. AI가 facingRight 값을 명시적으로 가지고 있다면 그걸 따름
-    // (전기도마뱀, 슬라임 등 AI가 방향을 제어하는 경우)
     if (typeof c.facingRight !== 'undefined') {
-        if (!c.facingRight) shouldFlip = true;
-    } 
-    // 2. AI가 방향을 안 주면 속도(vx)를 보고 결정
-    else {
+        if (!c.facingRight) shouldFlip = true; // 왼쪽을 보면 뒤집음
+    } else {
         if (c.vx < -0.1) shouldFlip = true;
     }
+    
+    // ★ 여기서 컨텍스트를 뒤집습니다!
+    if (shouldFlip) ctx.scale(-1, 1);
 
-    // 반전 적용
-    if (shouldFlip) {
-        ctx.scale(-1, 1);
-    }
 
-    // 렌더링 함수 호출
-    const renderFn = MOB_RENDERERS[rendererKey] || MOB_RENDERERS[c.typeData.drop] || drawDefault;
-    renderFn(ctx, size, baseColor, time, fastTime, getColor);
-
-    if (c.typeData.aiType === "glitch_chaos" && c.state === "system_crash" && c.targetX !== undefined) {
+    // ============================================================
+    // ★ [수정됨] 얼음 골렘 돌진 예고장 (<<< 또는 >>>)
+    // 스케일링(반전) 이후에 그리므로, 항상 오른쪽(>>>)으로 그리면
+    // 몹이 왼쪽을 볼 때는 자동으로 왼쪽(<<<)으로 뒤집혀서 나옵니다.
+    // ============================================================
+    if (c.typeData.aiType === "ice_golem" && c.state === "prep_charge") {
+        ctx.save();
         
-        // 현재 몬스터 위치(0,0) 기준으로 타겟 위치와의 거리 계산
-        // (drawCritter는 이미 translate가 되어 있으므로 상대 좌표를 써야 함)
+        // 1. 위치 잡기 (몹의 '앞'쪽으로 이동)
+        // size * 2 만큼 X축 이동 -> 몹의 전방
+        // -size * 0.5 만큼 Y축 이동 -> 몹의 허리~가슴 높이
+        ctx.translate(size * 2.5, -size * 0.5); 
+
+        // 2. 스타일 설정 (크고 붉은 경고)
+        ctx.strokeStyle = "#FF0000"; // 완전 빨강
+        ctx.lineWidth = 6;           // 두껍게
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.shadowColor = "#FF0000"; // 붉은 빛 번짐
+        ctx.shadowBlur = 20;         // 강하게 번짐
+
+        const chevronSize = 15;   // 화살표 크기 (큼직하게)
+        const spacing = 20;       // 화살표 간격
+        const count = 3;          // 개수
+
+        // 3. 흐르는 애니메이션 (몹 쪽에서 바깥으로 나가는 방향)
+        let flowAnim = (globalRenderTime * 0.5) % spacing;
+
+        // 4. 그리기 (항상 >>> 모양으로 그린다. 반전은 ctx.scale이 해줌)
+        for (let i = 0; i < count; i++) {
+            // 위치 계산
+            let tipX = (i * spacing) + flowAnim;
+            
+            // 투명도 (멀어질수록 흐려지게 or 깜빡임)
+            // 전체적으로 10프레임마다 깜빡임 추가
+            let blink = (Math.floor(globalRenderTime / 5) % 2 === 0) ? 1.0 : 0.5;
+            ctx.globalAlpha = blink;
+
+            ctx.beginPath();
+            // > 모양 그리기
+            ctx.moveTo(tipX - chevronSize, -chevronSize); 
+            ctx.lineTo(tipX, 0);                             
+            ctx.lineTo(tipX - chevronSize, chevronSize); 
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+    // ============================================================
+
+
+    // 5. 렌더러 실행
+    // 여기서 state를 넘겨줘야 애니메이션(만세, 달리기)이 작동함
+    const renderFn = MOB_RENDERERS[rendererKey] || MOB_RENDERERS[c.typeData.drop] || drawDefault;
+    renderFn(ctx, size, baseColor, time, fastTime, getColor, c.state); 
+
+
+    // 6. 시스템 크래시 UI (글리치 몹 전용)
+    if (c.typeData.aiType === "glitch_chaos" && c.state === "system_crash" && c.targetX !== undefined) {
+        // 이 UI는 절대 좌표계가 필요하므로 flip을 잠시 원상복구 해야 함
+        ctx.save();
+        if (shouldFlip) ctx.scale(-1, 1); // 다시 뒤집어서 원래대로
+
         let relX = c.targetX - c.x;
         let relY = c.targetY - c.y;
-
-        ctx.save();
-        ctx.translate(relX, relY); // 타겟 위치로 이동
-
-        // 1. 경고 박스 (깜빡임)
-        let opacity = Math.abs(Math.sin(globalRenderTime * 0.5)) * 0.5 + 0.2;
-        ctx.fillStyle = `rgba(255, 0, 60, ${opacity})`; // 붉은색
-        ctx.strokeStyle = "#FF003C";
-        ctx.lineWidth = 2;
-
-        // 크기 80x80 영역 표시
-        ctx.fillRect(-40, -40, 80, 80);
-        ctx.strokeRect(-40, -40, 80, 80);
-
-        // 2. 텍스트 표시
-        ctx.fillStyle = "#FFF";
-        ctx.font = "bold 12px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("⚠ SYSTEM CRASH", 0, -50);
         
-        // 3. X 표시 (타겟 지점)
-        ctx.beginPath();
-        ctx.moveTo(-20, -20); ctx.lineTo(20, 20);
-        ctx.moveTo(20, -20); ctx.lineTo(-20, 20);
-        ctx.stroke();
-
+        ctx.translate(relX, relY); 
+        let opacity = Math.abs(Math.sin(globalRenderTime * 0.5)) * 0.5 + 0.2;
+        ctx.fillStyle = `rgba(255, 0, 60, ${opacity})`; 
+        ctx.strokeStyle = "#FF003C"; ctx.lineWidth = 2;
+        ctx.fillRect(-40, -40, 80, 80); ctx.strokeRect(-40, -40, 80, 80);
+        ctx.fillStyle = "#FFF"; ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
+        ctx.fillText("⚠ SYSTEM CRASH", 0, -50);
+        ctx.beginPath(); ctx.moveTo(-20, -20); ctx.lineTo(20, 20); ctx.moveTo(20, -20); ctx.lineTo(-20, 20); ctx.stroke();
         ctx.restore();
     }
 

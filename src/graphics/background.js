@@ -301,12 +301,6 @@ export function renderTrees(ctx, layerIndex, fogRgb, cameraX, currentParallaxY, 
                 }
             }
             ctx.restore();
-
-            // (아이템 스폰 로직 생략...)
-            if (layer.depth === 1.0 && !t.isCactus && globalRenderTime % 120 === 0 && Math.random() < 0.003) {
-                const itemId = currentWeather.id === "clear" ? "apple" : "herb_blue";
-                spawnGatherItem(t.x, t.y - (t.size * heightMult * 100), itemId, "tree", t.id);
-            }
         });
     }
 }
@@ -383,10 +377,6 @@ export function renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, 
                 ctx.lineTo(g.x + 2, g.y + 5);
                 ctx.quadraticCurveTo(g.x + sway, g.y - g.h * 0.7, g.x + sway * 1.5, g.y - g.h);
                 ctx.fill(); 
-            }
-
-            if (g.layerDepth === 1.0 && globalRenderTime % 150 === 0 && Math.random() < 0.0005) {
-                spawnGatherItem(g.x, g.y - g.h, "fiber", "grass", g.id);
             }
         }
     }
@@ -492,11 +482,7 @@ function renderSpruceTree(ctx,col,snow,seed) {
     for(let i=0; i<8; i++) { const y=-20-i*20, w=70-i*8; ctx.fillStyle=needle; ctx.beginPath(); ctx.moveTo(0,y-30); ctx.lineTo(w,y); ctx.lineTo(-w,y); ctx.fill(); if(snow>0.2){ ctx.fillStyle=sn; ctx.beginPath(); ctx.moveTo(0,y-30); ctx.lineTo(w*0.6,y-10); ctx.lineTo(-w*0.6,y-10); ctx.fill(); } }
 }
 function renderSaguaro(ctx,col,seed) { const c = col(60,120,60); ctx.fillStyle=c; ctx.strokeStyle=c; ctx.lineWidth=22; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-110); ctx.stroke(); if(seed%2>0.5) { ctx.beginPath(); ctx.moveTo(0,-50); ctx.lineTo(-35,-50); ctx.lineTo(-35,-80); ctx.stroke(); } if(seed%3>1) { ctx.beginPath(); ctx.moveTo(0,-70); ctx.lineTo(35,-70); ctx.lineTo(35,-100); ctx.stroke(); } }
-function renderPricklyPear(ctx,col,seed) { ctx.fillStyle=col(80,140,60); const d=(x,y,w,h,a)=>{ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.beginPath();ctx.ellipse(0,-h/2,w,h,0,0,Math.PI*2);ctx.fill();ctx.restore();}; d(0,0,15,20,0); d(0,-35,20,25,0.3); d(-15,-40,14,18,-0.5); d(15,-45,14,20,0.5); }
 function renderTentacleTree(ctx,col,time,seed) { const c=col(50,0,70); ctx.fillStyle=c; const s=Math.sin(time*0.04)*15; ctx.beginPath(); ctx.moveTo(-10,0); ctx.quadraticCurveTo(-20,-60,s,-140); ctx.quadraticCurveTo(20,-60,10,0); ctx.fill(); }
-
-export function spawnGatherItem(x, y, type, hostType, hostId) { if(activeSpawns.length>15)return; const itemData = consumableDB[type] || { color: "#FFF" }; activeSpawns.push({ type, x, y, hostType, hostId, life: 1000, floatY: 0, color: itemData.color }); }
-export function renderSpawns(ctx) { activeSpawns.forEach(p => { p.life--; p.floatY += 0.05; ctx.save(); ctx.translate(p.x, p.y + Math.sin(p.floatY) * 5); ctx.globalAlpha = Math.min(1, p.life / 50); ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); }); activeSpawns = activeSpawns.filter(p => p.life > 0); }
 
 // [8] 랜드 렌더링
 export function renderLand(ctx, layer, index, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr) { 

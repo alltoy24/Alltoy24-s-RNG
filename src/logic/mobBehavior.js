@@ -35,7 +35,126 @@ export function updateMobAI(mob, player, realH) {
         case "flee_shooter":      aiFleeShooter(mob, player); break;
         case "slime_jump":        aiSlimeJump(mob, player); break;
         case "glitch_chaos": aiGlitchChaos(mob, player); break;
+        case "ice_golem":         aiIceGolem(mob, player); break;
         default:              aiWander(mob); break; 
+    }
+}
+
+function aiIceGolem(mob, player) {
+    const dist = Math.abs(player.x - mob.x);
+    const detectRange = 800; // 인식 범위
+
+    // 디버그 텍스트 표시
+    mob.debugText = `❄️ ${mob.state.toUpperCase()}`;
+
+    // 초기화: 다음 패턴이 뭔지 기억 (0: 돌진, 1: 내려치기)
+    if (mob.patternStep === undefined) mob.patternStep = 0;
+
+    // 1. [대기] IDLE - 플레이어 감지 시 패턴 시작
+    if (mob.state === "idle") {
+        mob.vx *= 0.8; // 정지
+
+        if (dist < detectRange) {
+            // 패턴에 따라 분기
+            if (mob.patternStep === 0) {
+                mob.state = "prep_charge";
+                mob.timer = 90; // 1.5초간 돌진 준비 (화살표 표시)
+            } else {
+                mob.state = "prep_smash";
+                mob.timer = 60; // 1초간 내려치기 준비 (팔 들기)
+            }
+            // 준비할 때는 플레이어 바라보기
+            mob.facingRight = (player.x > mob.x);
+        } else {
+            // 범위 밖이면 가끔 조금씩 움직임
+            if (Math.random() < 0.01) mob.vx = (Math.random() - 0.5) * 2;
+        }
+    }
+
+    // ====================================================
+    // [패턴 1] 돌진 (Charge)
+    // ====================================================
+    else if (mob.state === "prep_charge") {
+        mob.timer--;
+        mob.vx = 0;
+        
+        // 방향 확정
+        if (mob.chargeDir === undefined) {
+             mob.chargeDir = (player.x > mob.x) ? 1 : -1;
+             mob.facingRight = (mob.chargeDir === 1);
+        }
+        
+        if (mob.timer <= 0) {
+            mob.state = "charge";
+            mob.timer = 120; // 3초 동안 달리기
+            // ★ [수정] 속도 하향 (22 -> 14) : 너무 빠르지 않게
+            mob.vx = mob.chargeDir * 12; 
+        }
+    }
+    else if (mob.state === "charge") {
+        mob.timer--;
+        // (물리 엔진에서 마찰력 무시 처리됨)
+        
+        // 벽에 부딪히거나 시간이 다 되면 멈춤
+        if (mob.timer <= 0) {
+            mob.state = "braking";
+            mob.timer = 30;
+            mob.chargeDir = undefined;
+        }
+    }
+    else if (mob.state === "braking") {
+        mob.timer--;
+        mob.vx *= 0.85; // 끼이익
+        if (mob.timer <= 0) {
+            // ★ 패턴 종료 후 긴 휴식 (2초)
+            mob.state = "cooldown_long";
+            mob.timer = 120; 
+            mob.patternStep = 1; // 다음은 내려치기
+        }
+    }
+
+    // ====================================================
+    // [패턴 2] 내려치기 (Smash)
+    // ====================================================
+    else if (mob.state === "prep_smash") {
+        mob.timer--;
+        mob.vx = 0; 
+        mob.facingRight = (player.x > mob.x); // 계속 조준
+
+        if (mob.timer <= 0) {
+            mob.state = "smash"; // 찍기 모션
+            mob.timer = 40; 
+            
+            // ★ 바닥 찍는 순간 얼음 가시 생성
+            if (typeof window.spawnIceSpikes === 'function') {
+                window.spawnIceSpikes(mob.x, mob.y, mob.facingRight);
+            }
+        }
+    }
+    else if (mob.state === "smash") {
+        mob.timer--;
+        // 후딜레이
+        if (mob.timer <= 0) {
+            // ★ 패턴 종료 후 긴 휴식 (2초)
+            mob.state = "cooldown_long";
+            mob.timer = 120;
+            mob.patternStep = 0; // 다음은 돌진
+        }
+    }
+
+    // ====================================================
+    // [공통] 긴 휴식 (2초 쿨타임)
+    // ====================================================
+    else if (mob.state === "cooldown_long") {
+        mob.timer--;
+        mob.vx *= 0.9; // 미끄러짐 방지
+        
+        // 쿨타임 중에도 플레이어를 쳐다봄 (위압감)
+        if (mob.timer % 10 === 0) mob.facingRight = (player.x > mob.x);
+
+        if (mob.timer <= 0) {
+            mob.state = "idle";
+        }
     }
 }
 
@@ -557,8 +676,10 @@ export function applyMobMovement(mob, dt, realH) {
         return; // 여기서 함수 종료! (중력/마찰력 적용 안 함)
     }
     
-    // AI 속도 적용 (슬라임 제외)
-    if (mob.typeData.aiType !== "slime_jump" && mob.state !== "charge" && mob.state !== "braking" && mob.state !== "prep") {
+    if (mob.typeData.aiType !== "slime_jump" && 
+        !(mob.typeData.aiType === "ice_golem" && mob.state === "charge") && // 얼음골렘 돌진 중엔 AI 속도 개입 X
+        mob.state !== "charge" && mob.state !== "braking" && mob.state !== "prep" && mob.state !== "prep_smash") {
+        
         if (mob.targetVx !== undefined) {
             mob.vx += (mob.targetVx - mob.vx) * 0.1;
         }
@@ -576,7 +697,11 @@ export function applyMobMovement(mob, dt, realH) {
             mob.isGrounded = true;
             
             // 땅 마찰력
-            if (mob.state === "charge") mob.vx *= 0.97;
+            if (mob.typeData.aiType === "ice_golem" && mob.state === "charge") {
+                 // 마찰력 없음 (미끄러지듯 돌진)
+                 // mob.vx를 건드리지 않음
+            }
+            else if (mob.state === "charge") mob.vx *= 0.97;
             else if (mob.state === "braking") mob.vx *= 0.9;
             else if (mob.state === "prepare" || mob.state === "land") mob.vx = 0;
             else if (mob.typeData.aiType === "slime_jump" && mob.state === "air") {

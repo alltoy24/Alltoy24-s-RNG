@@ -79,6 +79,23 @@ let currentResult = null;
 let isAutoRolling = false;
 let autoRollTimer = null;
 let rewardShards = []; // 빨려 들어오는 조각들을 담을 배열
+let iceSpikes = [];
+
+// [신규] 플레이어 위치에 따른 바이옴 반환 함수
+function getPlayerBiome(x) {
+    if (x < 25000) return "SOUTH_EDGE";
+    if (x < 50000) return "FROZEN_MOUNTAIN"; // 눈 지역
+    if (x < 75000) return "CORRUPTED";
+    if (x < 100000) return "ANCIENT_RUIN";
+    if (x < 125000) return "CLIFFS";
+    if (x < 175000) return "PLAINS";
+    if (x < 200000) return "DESERT"; // 사막
+    if (x < 225000) return "BEACH";
+    if (x < 250000) return "MAGIC_FOREST";
+    if (x < 275000) return "FORGOTTEN_CITY";
+    if (x < 300000) return "FAR_LANDS";
+    return "NORTH_EDGE";
+}
 
 // ★★★ 여기서 canvas를 확실하게 찾아서 변수에 담습니다!
 const canvas = document.querySelector("#game-canvas");
@@ -145,9 +162,32 @@ const vfxCallbacks = {
     shake: (amount) => { shakeIntensity = amount; applyScreenShake(); }
 };
 
-// ==========================================
-// ★ [복구됨] UI 인터랙션 로직 (main.js가 데이터를 가지고 있으므로 여기서 처리)
-// ==========================================
+window.spawnIceSpikes = function(startX, startY, facingRight) {
+    playSound('ice_crack'); // 효과음 재생
+    shakeIntensity = 15; applyScreenShake(); // 화면 쾅!
+
+    const dir = facingRight ? 1 : -1;
+    const count = 15; // 가시 개수 증가
+    
+    // 가시가 파도처럼 퍼져나감
+    for(let i=0; i<count; i++) {
+        setTimeout(() => {
+            iceSpikes.push({
+                x: startX + (dir * (50 + i * 60)), // 간격
+                y: startY, 
+                life: 50, // 지속시간
+                maxLife: 50,
+                damage: 25, // 데미지
+                width: 40,
+                height: 0,
+                maxHeight: 120 + Math.random() * 50, // 높이 불규칙
+                alpha: 1.0
+            });
+            // 가시 솟을 때마다 진동
+            if(i % 2 === 0) { shakeIntensity = 5; applyScreenShake(); }
+        }, i * 80); // 0.08초 간격
+    }
+};
 
 
 // 1. 모달 토글 (데이터를 챙겨서 ui.js에게 그림 요청)
@@ -475,61 +515,82 @@ socket.on('timeSync', (serverTimeMinutes) => {
 function applyNewWeather(newWeather) {
     currentWeather = newWeather;
 
-    switch (currentWeather.id) {
-        case "clear":
-            targetCloudCount = 3;  // 개수 대폭 감소 (5개만)
-            targetCloudColor = { r: 255, g: 255, b: 255, a: 0.1 }; // 투명도 0.3 (아주 연함)
-            break;
-        case "cloudy":
-            targetCloudCount = 12; // 적당히
-            targetCloudColor = { r: 220, g: 220, b: 220, a: 0.3 }; // 반투명 회색
-            break;
-        case "rain":
-            targetCloudCount = 24; // 비올 때도 너무 꽉 막히지 않게 조절
-            targetCloudColor = { r: 150, g: 150, b: 145, a: 0.4 }; // 진한 먹구름
-            break;
-        case "thunder":
-            targetCloudCount = 24; // 비올 때도 너무 꽉 막히지 않게 조절
-            targetCloudColor = { r: 80, g: 80, b: 90, a: 0.5 }; // 진한 먹구름
-            break;
-        case "snow":
-            targetCloudCount = 16;
-            targetCloudColor = { r: 240, g: 240, b: 255, a: 0.3 };
-            break;
-        case "foggy":
-            targetCloudCount = 10;
-            targetCloudColor = { r: 200, g: 200, b: 200, a: 0.2 }; // 거의 안 보임
-            break;
-        case "glitch":
-            targetCloudCount = 5;
-            targetCloudColor = { r: 50, g: 0, b: 50, a: 0.25 };
-            break;
-        default:
-            targetCloudCount = 6;
-            targetCloudColor = { r: 255, g: 255, b: 255, a: 0.2 };
-            break;
+    // 1. 캔버스 요소 가져오기
+    const gameCanvas = document.getElementById("game-canvas");
+    const vfxCanvas = document.getElementById("vfx-canvas");
+
+    // ========================================================
+    // ★ [수정됨] 여기가 핵심입니다! 클래스를 넣었다 뺐다 해야 함
+    // ========================================================
+    if (currentWeather.id === "heatwave") {
+        // 폭염이면 클래스 추가 (필터 적용 ON)
+        if (gameCanvas) gameCanvas.classList.add("heatwave-active");
+        if (vfxCanvas) vfxCanvas.classList.add("heatwave-active");
+
+        showSideNotification("⚠️ EXTREME HEAT", "지표면 온도가 상승합니다.", "#FF5722");
+    } else {
+        // 아니면 클래스 제거 (필터 적용 OFF)
+        if (gameCanvas) gameCanvas.classList.remove("heatwave-active");
+        if (vfxCanvas) vfxCanvas.classList.remove("heatwave-active");
+
+        // (기존 알림 로직)
+        if (currentWeather.id === "glitch") {
+            showSideNotification("WEATHER ANOMALY", "<span class='glitch-text'>V̵O̵I̵D̵</span>", "#ff003c");
+        } else {
+            showSideNotification("WEATHER CHANGED", currentWeather.name, "#FFD700");
+        }
     }
 
-    // --- [2] 기존 로직 (알림, 소리, 파티클 등) ---
-    if(currentWeather.id === "glitch") {
-        showSideNotification("WEATHER ANOMALY", "<span class='glitch-text'>V̵O̵I̵D̵</span>", "#ff003c");
-    } else {
-        showSideNotification("WEATHER CHANGED", currentWeather.name, "#FFD700");
+    // 2. 구름/배경 설정 (기존 코드 유지)
+    switch (currentWeather.id) {
+        case "clear":
+            targetCloudCount = 3; targetCloudColor = { r: 255, g: 255, b: 255, a: 0.1 }; break;
+        case "cloudy":
+            targetCloudCount = 12; targetCloudColor = { r: 220, g: 220, b: 220, a: 0.3 }; break;
+        case "rain":
+            targetCloudCount = 24; targetCloudColor = { r: 150, g: 150, b: 145, a: 0.4 }; break;
+        case "thunder":
+            targetCloudCount = 24; targetCloudColor = { r: 80, g: 80, b: 90, a: 0.5 }; break;
+        case "snow":
+            targetCloudCount = 16; targetCloudColor = { r: 240, g: 240, b: 255, a: 0.3 }; break;
+        case "foggy":
+            targetCloudCount = 10; targetCloudColor = { r: 200, g: 200, b: 200, a: 0.2 }; break;
+        case "glitch":
+            targetCloudCount = 5; targetCloudColor = { r: 50, g: 0, b: 50, a: 0.25 }; break;
+        case "heatwave":
+            targetCloudCount = 0; targetCloudColor = { r: 255, g: 200, b: 150, a: 0.1 }; break; // 폭염은 구름 거의 없음
+        default:
+            targetCloudCount = 6; targetCloudColor = { r: 255, g: 255, b: 255, a: 0.2 }; break;
     }
-    
+
+    // 3. UI 텍스트 갱신
     const topWeatherDisplay = document.getElementById("weather-display");
     if (topWeatherDisplay) {
-        if(currentWeather.id === "glitch") topWeatherDisplay.innerHTML = `<span class="glitch-text">V̵O̵I̵D̵</span>`;
+        if (currentWeather.id === "glitch") topWeatherDisplay.innerHTML = `<span class="glitch-text">V̵O̵I̵D̵</span>`;
         else topWeatherDisplay.innerText = currentWeather.name;
     }
 
+    // 4. 오디오 전환
     smoothAudioTransition(currentWeather.music, currentWeather.sfx);
-    calcBuffs(); 
+    if (currentWeather.sfx) {
+        weatherSfxPlayer.src = currentWeather.sfx;
+        weatherSfxPlayer.play().catch(e => {});
+    } else {
+        weatherSfxPlayer.pause();
+        weatherSfxPlayer.currentTime = 0;
+    }
 
+    calcBuffs();
+
+    // 5. 파티클 개수 설정
     targetFog = (currentWeather.id === "foggy") ? 1.0 : 0.0;
     targetSnow = (currentWeather.id === "snow") ? 1.0 : 0.0;
-    
-    const pCounts = { "thunder": 1500, "rain": 800, "snow": 600, "wind": 100, "foggy": 15, "glitch": 1000 };
+
+    const pCounts = { 
+        "thunder": 1500, "rain": 800, "snow": 600, 
+        "wind": 100, "foggy": 15, "glitch": 1000, 
+        "heatwave": 0 // 폭염은 파티클 없이 왜곡 효과만 사용 (깔끔하게)
+    };
     let baseCount = pCounts[currentWeather.id] || 0;
     let density = (typeof GRAPHICS !== 'undefined') ? GRAPHICS.weatherDensity : 1.0;
     targetParticleCount = baseCount * density;
@@ -996,7 +1057,6 @@ function loadGame() {
                 handleUpdateAuto();
             }
 
-            // 3. 그래픽 설정 복구
             if (data.graphicsSettings) {
                 Object.assign(GRAPHICS, data.graphicsSettings);
                 
@@ -1005,10 +1065,26 @@ function loadGame() {
                     if(el) el.checked = val;
                 };
 
+                // [기존] 풀, 구름, 타인 공격
                 setCheck('chk-grass', GRAPHICS.showGrass);
                 setCheck('chk-clouds', GRAPHICS.showClouds);
                 setCheck('chk-others', GRAPHICS.showOtherAttacks);
                 
+                // ★ [신규 추가] 나무 렌더링 (데이터 없으면 기본값 true)
+                if (GRAPHICS.showTrees === undefined) GRAPHICS.showTrees = true;
+                setCheck('chk-trees', GRAPHICS.showTrees);
+
+                // ★ [신규 추가] 바이옴 이펙트, 배경 반짝이, 별 (데이터 없으면 기본값 true)
+                if (GRAPHICS.showBiomeVFX === undefined) GRAPHICS.showBiomeVFX = true;
+                setCheck('chk-biome-vfx', GRAPHICS.showBiomeVFX);
+
+                if (GRAPHICS.showAmbientParticles === undefined) GRAPHICS.showAmbientParticles = true;
+                setCheck('chk-ambient', GRAPHICS.showAmbientParticles);
+
+                if (GRAPHICS.showStars === undefined) GRAPHICS.showStars = true;
+                setCheck('chk-stars', GRAPHICS.showStars);
+                
+                // [기존] 간소화 및 기타 설정
                 setCheck('chk-proj', GRAPHICS.simpleProjectiles);
                 setCheck('chk-aura', GRAPHICS.simpleAuras);
                 setCheck('chk-mob', GRAPHICS.simpleMobs);
@@ -1016,6 +1092,7 @@ function loadGame() {
                 setCheck('chk-fireflies', GRAPHICS.showFireflies);
                 setCheck('chk-fancy', GRAPHICS.fancyGraphics); 
 
+                // 날씨 밀도 슬라이더 복구
                 const weatherSlider = document.querySelector('input[type="range"][oninput*="weatherDensity"]');
                 if (weatherSlider) {
                     weatherSlider.value = GRAPHICS.weatherDensity * 10;
@@ -1512,6 +1589,7 @@ const weathers = [
     { id: "thunder", name: "뇌우", chance: 8.5, condition: "ALL", music: "bgms/thunder.mp3", sfx: "weathers/thunder.mp3", buff: { luck: 0.5, speed: 0.5 } }, 
     { id: "cloudy", name: "흐림", chance: 10, condition: "ALL", music: "bgms/cloudy.mp3", sfx: "weathers/cloudy.mp3", buff: { luck: -0.1, speed: -0.1 } }, 
     { id: "foggy", name: "안개", chance: 10, condition: "ALL", music: "bgms/foggy.mp3", sfx: "weathers/foggy.mp3", buff: { luck: 0, speed: 0.3 } },
+    { id: "heatwave", name: "폭염", chance: 5, condition: "DAY", music: "bgms/heatwave.mp3", sfx: "weathers/heat_haze.mp3", buff: { luck: 0.2, speed: -0.3 } },
     // 일식, 월식 (상향된 버프 유지)
     { id: "eclipse", name: "일식", chance: 3, condition: "DAY", music: "bgms/eclipse.mp3", sfx: "weathers/eerie_hum.mp3", buff: { luck: 10.0, speed: 0 } }, 
     { id: "blood-moon", name: "월식", chance: 3, condition: "NIGHT", music: "bgms/blood_moon.mp3", sfx: "weathers/wolf_howl.mp3", buff: { luck: 5.0, speed: 5.0 } },
@@ -1658,37 +1736,108 @@ function spawnWeatherParticle() {
     let startX = Math.random() * W;
     let startY = -50; 
     
-    let vx = (Math.random() - 0.5) * 3; 
-    let vy = (currentWeather.id === "thunder") ? (35 * z) : (currentWeather.id === "rain") ? (25 * z) : (currentWeather.id === "snow" ? (4 * z) : 1); 
-    let size = 2 * z;
+    // 현재 플레이어의 바이옴 확인
+    const currentBiome = getPlayerBiome(player.x);
+    let type = currentWeather.id; // 기본은 현재 날씨 따름
 
-    // 💡 [수정] 글리치(차원 붕괴) 전용 데이터 파티클 속성
-    let char = "";
-    if (currentWeather.id === "glitch") {
-        vy = 10 + Math.random() * 20; // 빠르게 떨어짐
-        size = Math.random() * 15 + 10; // 폰트 크기
-        char = Math.random() < 0.5 ? "0" : "1"; // 0 또는 1
+    // ★ [조건 1] 사막/설산 강제 효과 및 날씨 차단
+    if (currentBiome === "DESERT") {
+        if (type === "rain" || type === "snow" || type === "thunder") return; // 사막에선 비/눈/천둥 파티클 생성 안 함
+    }
+    if (currentBiome === "FROZEN_MOUNTAIN") {
+        if (type === "heatwave") return; // 설산에선 폭염 파티클 생성 안 함
+        
+        // 설산은 맑은 날에도 눈이 조금씩 내림
+        if (type === "clear" || type === "cloudy") {
+            if (Math.random() < 0.3) type = "snow"; 
+        }
     }
 
-    if (currentWeather.id === "snow") { size = (4 * z) + 3; }
-    if(currentWeather.id === "wind") { startX = -50; startY = Math.random() * H; vx = 25 + Math.random() * 20; vy = (Math.random() - 0.5) * 4; size = Math.random() * 40 + 20; } 
-    if(currentWeather.id === "foggy") { vx = Math.random() * 0.4 - 0.2; vy = Math.random() * 0.5; size = Math.random() * 40 + 20; } 
+    let vx = (Math.random() - 0.5) * 3; 
+    let vy = (type === "thunder") ? (35 * z) : (type === "rain") ? (25 * z) : (type === "snow" ? (4 * z) : 1); 
+    let size = 2 * z;
+    let char = ""; // 글리치용
 
-    weatherParticles.push({ x: startX, y: startY, z: z, vx: vx, vy: vy, size: size, weatherType: currentWeather.id, opacity: currentWeather.id === "foggy" ? Math.random() * 0.02 : 0.3 + (0.5 * z), char: char }); 
+    // 폭염 파티클 (아지랑이)
+    if (type === "heatwave") {
+        startY = H + 50; 
+        vy = -(Math.random() * 2 + 1); 
+        vx = (Math.random() - 0.5) * 0.5; 
+        size = Math.random() * 40 + 20; 
+    }
+
+    // 글리치 파티클
+    if (type === "glitch") {
+        vy = 10 + Math.random() * 20; 
+        size = Math.random() * 15 + 10; 
+        char = Math.random() < 0.5 ? "0" : "1"; 
+    }
+
+    if (type === "snow") { size = (4 * z) + 3; }
+    if (type === "wind") { 
+        startX = -50; startY = Math.random() * H; 
+        vx = 25 + Math.random() * 20; vy = (Math.random() - 0.5) * 4; 
+        size = Math.random() * 40 + 20; 
+    } 
+    if (type === "foggy") { 
+        vx = Math.random() * 0.4 - 0.2; vy = Math.random() * 0.5; 
+        size = Math.random() * 40 + 20; 
+    } 
+
+    // 파티클 등록 (weatherType을 보정된 type으로 저장)
+    weatherParticles.push({ 
+        x: startX, y: startY, z: z, vx: vx, vy: vy, 
+        size: size, weatherType: type, // 수정된 타입 사용
+        opacity: type === "foggy" ? Math.random() * 0.02 : 0.3 + (0.5 * z), 
+        char: char 
+    }); 
 }
 
 function renderWeatherLayer(minZ, maxZ) { 
     ctx.lineWidth = 2; 
+    const currentBiome = getPlayerBiome(player.x);
     for (let i = weatherParticles.length - 1; i >= 0; i--) {
         let p = weatherParticles[i];
+        if (currentBiome === "DESERT" && (p.weatherType === "rain" || p.weatherType === "snow")) continue;
+        if (currentBiome === "FROZEN_MOUNTAIN" && p.weatherType === "heatwave") continue;
         if (p.z >= minZ && p.z < maxZ) { 
             let px = p.x - currentParallaxX * 100 * p.z; let py = p.y - currentParallaxY * 50 * p.z; 
             
             if (p.weatherType === "snow") { ctx.fillStyle = `rgba(255,255,255,${p.opacity})`; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill(); } 
             else if (p.weatherType === "rain" || p.weatherType === "thunder") { ctx.strokeStyle = `rgba(173, 216, 230, ${p.opacity})`; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + p.vx, py + p.vy); ctx.stroke(); } 
-            else if (p.weatherType === "wind") { ctx.strokeStyle = `rgba(255, 255, 255, ${p.opacity * 0.5})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + p.size, py); ctx.stroke(); } 
+            else if (p.weatherType === "wind") { 
+                // 사막이면 모래색 선, 아니면 흰색 반투명 선
+                if (currentBiome === "DESERT") {
+                    // 모래색 (Sand)
+                    ctx.strokeStyle = `rgba(194, 178, 128, ${p.opacity * 0.8})`; 
+                    ctx.lineWidth = 4; // 모래바람은 좀 더 두껍고 거칠게
+                } else {
+                    // 일반 바람 (White)
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${p.opacity * 0.5})`; 
+                    ctx.lineWidth = 3;
+                }
+                
+                ctx.beginPath(); 
+                ctx.moveTo(px, py); 
+                ctx.lineTo(px + p.size, py); // 가로로 긋기
+                ctx.stroke(); 
+            }
             else if (p.weatherType === "foggy") { let grad = ctx.createRadialGradient(px, py, 0, px, py, p.size); grad.addColorStop(0, `rgba(255,255,255, ${p.opacity})`); grad.addColorStop(1, `rgba(255,255,255, 0)`); ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill(); } 
             
+            else if (p.weatherType === "heatwave") {
+                let grad = ctx.createRadialGradient(px, py, 0, px, py, p.size);
+                // 주황빛 열기
+                grad.addColorStop(0, `rgba(255, 100, 0, ${p.opacity * 0.2})`); 
+                grad.addColorStop(1, `rgba(255, 200, 0, 0)`);
+                ctx.fillStyle = grad;
+                
+                // 물결치며 올라가는 효과
+                let wave = Math.sin(globalRenderTime * 0.1 + p.y * 0.05) * 5;
+                ctx.beginPath(); 
+                ctx.arc(px + wave, py, p.size, 0, Math.PI * 2); 
+                ctx.fill();
+            }
+
             // 💡 [핵심] 글리치 데이터(0, 1) 매트릭스 렌더링
             else if (p.weatherType === "glitch") {
                 ctx.font = `bold ${p.size}px monospace`;
@@ -1734,73 +1883,203 @@ window.toggleChat = function() {
 
 let activeSpawns = [];
 setInterval(() => {
+    // 1. 아이템 데이터 가져오기
     let itemData = consumableDB[currentWeather.id] || consumableDB["clear"];
     if (!itemData) return;
-    let spawnChance = 0.4; 
-    if (Math.random() < spawnChance && activeSpawns.length < 5) {
-        let hostArray = itemData.host === "tree" ? trees : grassBlades;
+
+    // 2. 화면 내 아이템 개수 확인 (화면 밖 아이템은 카운트 제외)
+    let visibleCount = activeSpawns.filter(p => p.screenX >= -200 && p.screenX <= W + 200).length;
+
+    // 3. 희소성 유지 (최대 3개) + 50% 확률
+    if (visibleCount < 3) {
+        if (Math.random() > 0.5) return;
+
+        // ★ [핵심 변경] 호스트에 따라 목표 깊이(Depth) 설정
+        // 나무 아이템 -> 0.7 (배경, 근경)
+        // 풀 아이템 -> 1.0 (플레이어 발 밑)
+        const targetDepth = (itemData.host === "tree") ? 0.7 : 1.0;
+        
+        // 대상 배열 선택
+        let hostArray = (itemData.host === "tree") ? trees : grassBlades;
         if (hostArray.length === 0) return;
-        let targetHost = hostArray[Math.floor(Math.random() * hostArray.length)];
-        let isOccupied = activeSpawns.some(s => s.hostId === targetHost.id && s.hostType === itemData.host);
-        if (!isOccupied) activeSpawns.push({ type: itemData.id || currentWeather.id, hostType: itemData.host, hostId: targetHost.id, life: 1200, floatY: 0 });
+
+        // ★ [필터링] 지정된 깊이(targetDepth)에 있고, 화면 안에 있는 호스트만 찾음
+        let candidates = hostArray.filter(h => {
+            // (1) 깊이 일치 여부 확인
+            // (부동소수점 오차 고려하여 아주 작은 차이는 허용)
+            if (Math.abs(h.layerDepth - targetDepth) > 0.01) return false;
+
+            // (2) 화면 내 존재 여부 (Parallax 적용된 화면 좌표 기준)
+            let screenX = h.baseX - (cameraX * h.layerDepth);
+            
+            // 화면 좌우 여유분 200px 포함
+            return screenX > -200 && screenX < W + 200;
+        });
+        
+        if (candidates.length > 0) {
+            // 후보 중 하나 랜덤 선택
+            let targetHost = candidates[Math.floor(Math.random() * candidates.length)];
+            
+            // 중복 스폰 방지
+            let isOccupied = activeSpawns.some(s => s.hostId === targetHost.id);
+            
+            if (!isOccupied) {
+                let spawnY = targetHost.y || getGroundY(targetHost.baseX, targetHost.layerDepth);
+                let yOffset = (itemData.host === "tree") ? 150 : 20;
+                
+                // 초기 Y값 계산 (Parallax Y 적용)
+                let initialScreenY = spawnY - yOffset - (currentParallaxY * 50 * targetHost.layerDepth);
+
+                activeSpawns.push({ 
+                    type: itemData.id || currentWeather.id, 
+                    hostType: itemData.host, 
+                    hostId: targetHost.id, 
+                    life: 2400, // 수명 40초 (조금 더 길게)
+                    floatY: Math.random() * Math.PI * 2, 
+                    
+                    // 초기 화면 좌표 (깜빡임 방지용)
+                    screenX: targetHost.baseX - (cameraX * targetHost.layerDepth), 
+                    screenY: initialScreenY
+                });
+            }
+        }
     }
 }, 1000);
 
 function renderSpawns(ctx) {
     activeSpawns.forEach(p => {
-        p.life--; p.floatY += 0.05;
+        p.life--; 
+        p.floatY += 0.05;
+        
         let itemData = consumableDB[p.type];
+        if (!itemData) return;
+
         let hostArray = p.hostType === "tree" ? trees : grassBlades;
         let host = hostArray.find(h => h.id === p.hostId);
+        
         if (!host) { p.life = 0; return; }
-        let renderX = host.x; let renderY = host.y;
-        if (p.hostType === "tree") renderY -= (host.size * 50); else { renderX += host.sway; renderY -= host.h; }
-        renderY += Math.sin(p.floatY) * 5;
-        p.screenX = renderX; p.screenY = renderY;
-        ctx.save(); ctx.translate(renderX, renderY);
+
+        // --- 위치 계산 (기존 물리 로직 유지) ---
+        let rootX = host.baseX - (cameraX * host.layerDepth);
+        let rootY = getGroundY(host.baseX, host.layerDepth) - (currentParallaxY * 50 * host.layerDepth);
+        let finalX = rootX, finalY = rootY;
+
+        if (p.hostType === "tree") {
+            // 나무: 회전 물리
+            let baseH = host.isCactus ? 80 : 140; 
+            let offsetX = ((host.seed % 40) - 20); 
+            let offsetY = baseH + (host.seed % 20);
+            
+            let localX = offsetX * host.size;
+            let localY = -offsetY * host.size;
+
+            let swayAngle = Math.sin(globalRenderTime * 0.015 + host.seed) * 0.08;
+            if (host.isCactus) swayAngle *= 0.2;
+
+            let rotatedX = localX * Math.cos(swayAngle) - localY * Math.sin(swayAngle);
+            let rotatedY = localX * Math.sin(swayAngle) + localY * Math.cos(swayAngle);
+
+            finalX = rootX + rotatedX;
+            finalY = rootY + rotatedY;
+            finalY += Math.sin(p.floatY) * 1.5;
+
+        } else {
+            // 풀: 스큐 이동
+            let sway = Math.sin(windTime + host.swayOffset) * 6;
+            finalX = rootX + (sway * 1.5); 
+            finalY = rootY - host.h;
+            finalY += Math.sin(p.floatY) * 3; 
+        }
+
+        // 화면 좌표 저장
+        p.screenX = finalX; 
+        p.screenY = finalY;
+
+        // --- 그리기 ---
+        ctx.save(); 
+        ctx.translate(finalX, finalY);
+        
+        // ★ [추가] 배경(0.7)에 있는 아이템은 80% 크기로 작게 그림 (원근감)
+        if (host.layerDepth < 1.0) {
+            ctx.scale(0.8, 0.8);
+        }
+
         ctx.globalAlpha = Math.min(1, p.life / 50);
-        ctx.shadowBlur = 20 + Math.sin(p.floatY)*10; ctx.shadowColor = itemData.color; ctx.fillStyle = itemData.color; 
-        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+        
+        if (GRAPHICS.fancyGraphics) {
+            ctx.shadowBlur = 10; 
+            ctx.shadowColor = itemData.color; 
+            ctx.fillStyle = itemData.color; 
+        } else {
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = itemData.color; 
+        }
+        
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 1.5; ctx.stroke();
+        
         ctx.restore();
     });
+    
     activeSpawns = activeSpawns.filter(p => p.life > 0);
 }
 
-// 클릭 이벤트 수정: 채집물은 클릭, 몬스터는 오직 공격으로만!
 canvas.addEventListener('pointerdown', (e) => {
     let rect = canvas.getBoundingClientRect(); 
-    // 보정 없이 직접 좌표 추출
+    // 모바일/PC 배율 보정 없이 직접 좌표 추출 (렌더링 로직과 통일)
     let clickX = (e.clientX - rect.left);
     let clickY = (e.clientY - rect.top);
 
-    // 1. 별똥별 캐치 (클릭 유지)
+    // 1. 별똥별 캐치 (기존 코드 유지)
     for (let i = shootingStars.length - 1; i >= 0; i--) {
         let s = shootingStars[i];
         if (Math.hypot(clickX - s.x, clickY - s.y) < 80) { 
             playSound('star'); 
             vfxParticles.spawnExplosion(s.x, s.y, s.color, 30, 10);
-            fragments += 250; updateAllUI();
-            // ★ [추가] 별의 기운 경험치
+            fragments += 250; 
             addExp(100);
+            updateAllUI();
             shootingStars.splice(i, 1); return; 
         }
     }
 
-    // 2. 아이템 채집 판정 (클릭 유지)
+    // 2. ★ [수정됨] 아이템 채집 판정
     for (let i = activeSpawns.length - 1; i >= 0; i--) {
         let p = activeSpawns[i];
+        
+        // 아직 화면 좌표가 계산 안 된 아이템은 패스
         if (!p.screenX || !p.screenY) continue;
+        
+        // 거리 60px 이내 클릭 시 획득
         if (Math.hypot(clickX - p.screenX, clickY - p.screenY) < 60) { 
-            playSound('success'); 
-            let itemKey = p.type;
+            playSound('success'); // 1. 소리 재생
+            
+            // ★ [핵심 수정] 변수 선언을 사용보다 먼저 해야 합니다!
+            let itemKey = p.type; 
+            
+            // 2. 로그 띄우기 (이제 itemKey가 있어서 에러 안 남)
+            if (typeof spawnItemLog === 'function') spawnItemLog(itemKey);
+            
+            // 3. 인벤토리에 추가
             consumableInv[itemKey] = (consumableInv[itemKey] || 0) + 1;
-            vfxParticles.spawnExplosion(p.screenX, p.screenY, consumableDB[itemKey]?.color || "#FFF", 20, 8); 
-            activeSpawns.splice(i, 1); return; 
+            
+            // 4. 이펙트 생성
+            if (vfxParticles) {
+                vfxParticles.spawnExplosion(p.screenX, p.screenY, consumableDB[itemKey]?.color || "#FFF", 20, 8); 
+            }
+
+            // 5. 화면에서 아이템 제거
+            activeSpawns.splice(i, 1); 
+
+            // ★ [추가] UI 즉시 갱신 (숫자 올라가는 거 바로 보이게)
+            if (typeof renderConsumableList === 'function') renderConsumableList(consumableInv);
+            if (typeof renderQuickBar === 'function') renderQuickBar(consumableInv);
+
+            return; // 획득했으면 공격 모션 안 나가게 종료
         }
     }
 
-    // 3. 공격 발동 (몬스터는 이제 클릭이 아니라 이걸 맞춰야 함)
+    // 3. 공격 발동 (아이템 클릭 아닐 때만)
     triggerAttack(clickX, clickY);
 });
 
@@ -2134,14 +2413,17 @@ function render() {
     let fogRgb = [200, 210, 220]; 
     let starOpacity = (hours < 5 || hours > 19 ? 1 : (hours >= 18 ? (hours-18) : (5-hours))) * currentSkyAlpha; 
 
-    if (starOpacity > 0.05) { 
-        stars.forEach(s => { 
-            ctx.fillStyle = `rgba(255,255,255,${s.alpha * starOpacity})`; 
-            ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); 
-            s.alpha += (Math.random() - 0.5) * 0.05; 
-            if (s.alpha < 0) s.alpha = 0; if (s.alpha > 1) s.alpha = 1; 
-        }); 
-    } 
+
+    if (GRAPHICS.showStars) {
+        if (starOpacity > 0.05) { 
+            stars.forEach(s => { 
+                ctx.fillStyle = `rgba(255,255,255,${s.alpha * starOpacity})`; 
+                ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); 
+                s.alpha += (Math.random() - 0.5) * 0.05; 
+                if (s.alpha < 0) s.alpha = 0; if (s.alpha > 1) s.alpha = 1; 
+            }); 
+        } 
+    }
 
     if (currentSkyAlpha > 0.05) { 
         let dayAngle = ((preciseHour - 6) / 24) * Math.PI * 2; 
@@ -2344,8 +2626,9 @@ function render() {
     renderWeatherLayer(0.2, 0.4); 
 
     // [나무 렌더링]
-    renderTrees(ctx, 2, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather);
-
+    if (GRAPHICS.showTrees) {
+        renderTrees(ctx, 2, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, hours, globalRenderTime, currentWeather);
+    }
     // 1. 근경 풀 (0.7) - 땅보다 먼저 그려서 뒤로 숨김 (심어진 느낌)
     if (GRAPHICS.showGrass) {
         // 맨 뒤에 0.7을 넣어서 근경 풀만 그립니다.
@@ -2360,6 +2643,82 @@ function render() {
     if (GRAPHICS.showGrass) {
         // 맨 뒤에 1.0을 넣어서 플레이어 풀만 그립니다.
         renderGrass(ctx, fogRgb, cameraX, currentParallaxY, currentFog, currentSnow, windTime, currentWeather, hours, W, globalRenderTime, biomeMgr, 1.0);
+    }
+
+    if (globalRenderTime % 360 === 0) {
+        
+        // ★ [수정] 하드코딩 삭제! items.js의 consumableDB를 직접 사용합니다.
+        // 현재 날씨 ID(heatwave 등)로 데이터를 찾고, 없으면 clear(태양의 열매)를 씁니다.
+        let itemData = consumableDB[currentWeather.id] || consumableDB["clear"];
+        
+        // 화면 범위
+        const viewLeft = cameraX - 100;
+        const viewRight = cameraX + W + 100;
+        
+        // 아이템 개수 체크
+        let visibleItems = activeSpawns.filter(p => p.x > viewLeft && p.x < viewRight).length;
+
+        if (itemData && visibleItems < 2) {
+            // 호스트 결정
+            let hostArray = itemData.host === "tree" ? trees : grassBlades;
+            
+            // 화면 내 & 같은 깊이(1.0)의 호스트 찾기
+            let candidates = hostArray.filter(h => {
+                return h.layerDepth === 1.0 && h.baseX > viewLeft && h.baseX < viewRight;
+            });
+
+            if (candidates.length > 0) {
+                let target = candidates[Math.floor(Math.random() * candidates.length)];
+                
+                if (!activeSpawns.some(s => s.hostId === target.id)) {
+                    // 높이 계산
+                    let spawnY = target.y || getGroundY(target.baseX);
+                    let yOffset = (itemData.host === "tree") ? 150 : 20;
+
+                    activeSpawns.push({
+                        type: itemData.id, // 이제 items.js의 ID가 들어갑니다
+                        hostId: target.id,
+                        x: target.baseX, 
+                        y: spawnY - yOffset, 
+                        life: 2400, 
+                        floatY: Math.random() * Math.PI,
+                        color: itemData.color // items.js의 색상 사용
+                    });
+                }
+            }
+        }
+    }
+
+    // 2. 렌더링 로직 (기존과 동일, 유지)
+    for (let i = activeSpawns.length - 1; i >= 0; i--) {
+        // ... (이 부분은 아까와 동일하니 그대로 두셔도 됩니다) ...
+        let p = activeSpawns[i];
+        p.life--;
+        p.floatY += 0.05;
+
+        if (p.life <= 0 || p.x < cameraX - 1000 || p.x > cameraX + W + 1000) {
+            activeSpawns.splice(i, 1);
+            continue;
+        }
+
+        let renderY = p.y + Math.sin(p.floatY) * 5;
+        
+        ctx.save();
+        ctx.translate(p.x, renderY);
+        
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.strokeStyle = "#FFF";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+        
+        p.screenX = p.x - cameraX;
+        p.screenY = renderY - currentParallaxY * 50;
     }
 
     // 8. [바닥] 플레이어가 밟는 땅 (Depth: 1.0)
@@ -2444,11 +2803,19 @@ function render() {
         }
 
         // 지형 판정 (기존 유지)
+        // 지형 판정 (Snap to Ground 적용)
         const currentGroundY = getGroundY(player.x);
-        if (player.y >= currentGroundY) {
-            player.y = currentGroundY; 
-            player.vy = 0; 
-            player.isGrounded = true;
+        
+        // [수정] 내리막길 판정 완화 (Sticky Ground Logic)
+        // 땅과의 거리가 15px 이내라면, 점프 중이 아닐 때 강제로 땅에 붙임
+        const SNAP_MARGIN = 15; 
+
+        // 조건 1: 플레이어가 땅보다 아래에 있거나 (기존 로직)
+        // 조건 2: 플레이어가 땅보다 살짝 위에 있지만(내리막길 등), 범위 안이고 && 위로 점프 중이 아닐 때(vy >= 0)
+        if (player.y >= currentGroundY - SNAP_MARGIN && player.vy >= 0) {
+            player.y = currentGroundY;  // 위치를 땅으로 고정
+            player.vy = 0;              // 수직 속도 초기화
+            player.isGrounded = true;   // 땅에 있음 판정
         } else { 
             player.isGrounded = false; 
         }
@@ -2734,6 +3101,69 @@ function render() {
     ctx.restore();
     ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
 
+    for (let i = iceSpikes.length - 1; i >= 0; i--) {
+        let s = iceSpikes[i];
+        
+        // 1. 상태 업데이트 (크기 변화 및 투명도)
+        s.life--;
+        // 솟아오르는 애니메이션 (처음 10프레임)
+        if (s.life > s.maxLife - 10) {
+            s.height += s.maxHeight / 10;
+        }
+        // 사라지는 애니메이션 (마지막 10프레임)
+        if (s.life < 10) {
+            s.alpha = s.life / 10;
+        } else {
+            s.alpha = 1.0;
+        }
+
+        // 지형 높이 보정 (항상 땅 위에 붙어있게)
+        let gY = getGroundY(s.x);
+        
+        // 2. 그리기 (뾰족한 얼음 결정)
+        ctx.save();
+        ctx.translate(s.x, gY);
+        ctx.globalAlpha = s.alpha;
+        
+        // 얼음 색상 그라데이션
+        let grad = ctx.createLinearGradient(0, 0, 0, -s.height);
+        grad.addColorStop(0, "#ffffff"); // 뿌리
+        grad.addColorStop(0.5, "#81D4FA"); // 중간
+        grad.addColorStop(1, "#0288D1"); // 끝
+        ctx.fillStyle = grad;
+        
+        ctx.beginPath();
+        ctx.moveTo(-s.width/2, 0);
+        ctx.lineTo(0, -s.height); // 뾰족한 끝
+        ctx.lineTo(s.width/2, 0);
+        ctx.fill();
+        
+        // 외곽선 (선명하게)
+        ctx.strokeStyle = "#E1F5FE";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+
+        // 3. 플레이어 충돌 판정 (데미지 & 넉백)
+        if (!player.isDead && player.invincibleTime <= 0) {
+            // 플레이어와의 거리 체크 (가시 범위: x ± width/2, y ~ y-height)
+            // 가시가 플레이어 발 밑에서 솟아오르거나 닿았는지 확인
+            if (Math.abs(player.x - s.x) < s.width && player.y > gY - s.height) {
+                takeDamage(s.damage); // 데미지 입힘
+                
+                // 넉백 (가시 중심 기준으로 밀려남)
+                player.vx = (player.x < s.x) ? -15 : 15;
+                player.vy = -10;
+            }
+        }
+
+        // 4. 수명 다하면 삭제
+        if (s.life <= 0) {
+            iceSpikes.splice(i, 1);
+        }
+    }
+
     for (const [id, pData] of Object.entries(otherPlayers)) {
         if (pData.x > cameraX - 100 && pData.x < cameraX + W + 100) {
             ctx.save();
@@ -2803,7 +3233,7 @@ function render() {
     
     ctx.restore();
 
-    if (globalRenderTime % 240 === 0) {
+    if (globalRenderTime % 60 === 0) {
         
         const getBiomeSimple = (x) => {
             if (x < 25000) return "SOUTH_EDGE";
@@ -2995,12 +3425,12 @@ function render() {
                 const aura = allAuras.find(a => a.name === equippedAuraName);
                 // 1. 데미지 계산을 '먼저' 해야 합니다! (ReferenceError 방지)
                 let baseDamage = (p.rarity || 1) / 10;
-                if(p.type === 1) baseDamage *= 0.3;
-                if(p.type === 2) baseDamage *= 0.2;
-                if(p.type === 3) baseDamage *= 0.35;
+                if(p.type === 1) baseDamage *= 0.5;
+                if(p.type === 2) baseDamage *= 0.4;
+                if(p.type === 3) baseDamage *= 0.4;
                 if(p.type === 4) baseDamage *= 0.25;
-                if(p.type === 5) baseDamage *= 0.4;
-                if(p.type === 6) baseDamage = Math.max(999, baseDamage);
+                if(p.type === 5) baseDamage *= 0.5;
+                if(p.type === 6) baseDamage *= 1;
 
                 let variance = 0.8 + Math.random() * 0.4; 
                 let finalDamage = baseDamage * variance; // ✅ 이제 사용 준비 완료
@@ -3107,9 +3537,11 @@ function render() {
     renderSpawns(ctx);
     vfxParticles.updateAndDraw(ctx); 
 
-    biomeVFX.update(player.x, W, H, currentWeather.id); 
-    
-    biomeVFX.draw(ctx, W, H);
+    if (GRAPHICS.showBiomeVFX) {
+        biomeVFX.update(player.x, W, H, currentWeather.id); 
+        
+        biomeVFX.draw(ctx, W, H);
+    }
 
     // ==========================================
     // ★ 조각 연출 업데이트 및 렌더링
@@ -3206,15 +3638,17 @@ function render() {
     let fogAlpha = currentWeather.id === "foggy" ? Math.min(0.5, currentFog) : (currentFog * 0.3);
     DOM.fogOverlay.style.background = `rgba(${fogRgb[0]}, ${fogRgb[1]}, ${fogRgb[2]}, ${fogAlpha})`; 
     
-    let ambientColor = (hours < 6 || hours > 18) ? "#b3e5fc" : (currentWeather.id === "clear" ? "#FFD700" : "#ffffff");
-    ctx.fillStyle = ambientColor;
-    window.ambientParticles.forEach(p => {
-        p.x += p.vx + (currentWeather.id === "wind" ? 2 : 0); 
-        p.y += p.vy;
-        if(p.x < 0) p.x = W; if(p.x > W) p.x = 0; if(p.y < 0) p.y = H; if(p.y > H) p.y = 0;
-        ctx.globalAlpha = p.alpha * (0.3 + Math.sin(globalRenderTime * 0.02 + p.x) * 0.2);
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-    });
+    if (GRAPHICS.showAmbientParticles) {
+        let ambientColor = (hours < 6 || hours > 18) ? "#b3e5fc" : (currentWeather.id === "clear" ? "#FFD700" : "#ffffff");
+        ctx.fillStyle = ambientColor;
+        window.ambientParticles.forEach(p => {
+            p.x += p.vx + (currentWeather.id === "wind" ? 2 : 0); 
+            p.y += p.vy;
+            if(p.x < 0) p.x = W; if(p.x > W) p.x = 0; if(p.y < 0) p.y = H; if(p.y > H) p.y = 0;
+            ctx.globalAlpha = p.alpha * (0.3 + Math.sin(globalRenderTime * 0.02 + p.x) * 0.2);
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        });
+    }
     ctx.globalAlpha = 1.0;
 
     // 내 현재 바닥 위치와의 차이를 계산 (공중에 있으면 음수, 바닥이면 0)
@@ -3237,65 +3671,92 @@ function render() {
 
     biomeMgr.update(player.x); 
 
+    const currentBiome = getPlayerBiome(player.x);
+    const turbulence = document.getElementById("heat-turbulence");
+    const displacement = document.querySelector("#heatwave-filter feDisplacementMap"); // 왜곡 강도 조절용
+    const gameCanvas = document.getElementById("game-canvas");
+    const vfxCanvas = document.getElementById("vfx-canvas");
+
+    // 1. 아지랑이 (Heat Haze) 로직
+    // 기본적으로 끔
+    let heatScale = 0; 
+    let heatBaseFreqY = 0.006;
+    let isHeatActive = false;
+
+    // (A) 사막 지역: 기본적으로 약한 아지랑이 (scale 3)
+    if (currentBiome === "DESERT") {
+        heatScale = 3;
+        isHeatActive = true;
+        
+        // 사막 + 폭염 날씨면 강도 2배 (기본 6 -> 12)
+        if (currentWeather.id === "heatwave") {
+            heatScale = 12; // 매우 강력함
+        }
+    } 
+    // (B) 그 외 지역: 폭염 날씨일 때만 작동 (scale 6)
+    else if (currentWeather.id === "heatwave") {
+        // 설산에선 폭염 효과 무효화
+        if (currentBiome !== "FROZEN_MOUNTAIN") {
+            heatScale = 6;
+            isHeatActive = true;
+        }
+    }
+
+    // 필터 적용 로직
+    if (isHeatActive && turbulence && displacement) {
+        // 클래스 켜기
+        gameCanvas.classList.add("heatwave-active");
+        if(vfxCanvas) vfxCanvas.classList.add("heatwave-active");
+
+        // 왜곡 강도 실시간 적용
+        displacement.setAttribute("scale", heatScale);
+
+        // 아지랑이 애니메이션
+        let shift = Math.sin(globalRenderTime * 0.005) * 0.002; 
+        turbulence.setAttribute("baseFrequency", `0.015 ${0.02 + shift}`);
+    } else {
+        // 끄기
+        gameCanvas.classList.remove("heatwave-active");
+        if(vfxCanvas) vfxCanvas.classList.remove("heatwave-active");
+    }
+
+    // 2. 폭풍 및 안개 (Storm Fog) 로직
+    // 기본 안개 색
+    let targetFogRgb = [200, 210, 220]; 
+    let stormIntensity = 0;
+
+    if (currentBiome === "DESERT") {
+        if (currentWeather.id === "wind") {
+            targetFogRgb = [180, 160, 120]; // 칙칙한 모래색 (너무 쨍한 노랑 X)
+            
+            // ★ 개선: 단순히 0.6으로 덮는 게 아니라, 바람 강약에 따라 0.2 ~ 0.4로 출렁임
+            // 이러면 시야가 보였다 안 보였다 하면서 "모래가 휩쓸고 지나가는" 느낌이 남
+            stormIntensity = 0.25 + Math.sin(globalRenderTime * 0.05) * 0.15;
+        }
+        // 폭염이나 맑음일 때는 필터 없음 (깨끗하게 아지랑이만)
+    }
+    
+    // (B) 설산 눈보라 (Blizzard)
+    else if (currentBiome === "FROZEN_MOUNTAIN") {
+        // 눈이나 바람일 때 화이트아웃 현상
+        if (currentWeather.id === "snow" || currentWeather.id === "wind") {
+            targetFogRgb = [230, 240, 255]; // 차가운 흰색
+            // 눈보라는 좀 더 진하게 (0.4 ~ 0.6)
+            stormIntensity = 0.5 + Math.sin(globalRenderTime * 0.02) * 0.1;
+        }
+    }
+    
+    // (C) 일반 안개 (Foggy)
+    else if (currentWeather.id === "foggy") {
+        stormIntensity = 0.5;
+    }
+
+    // 안개 적용 (DOM 요소 스타일 변경)
+    DOM.fogOverlay.style.background = `rgba(${targetFogRgb[0]}, ${targetFogRgb[1]}, ${targetFogRgb[2]}, ${stormIntensity})`;
+
     requestAnimationFrame(render); 
 }
 render();
-
-function changeWeather() {
-    oldWeatherId = currentWeather.id;
-    
-    let isDay = (hours >= 6 && hours < 18);
-
-    let availableWeathers = weathers.filter(w => {
-        if (w.condition === "DAY" && !isDay) return false;
-        if (w.condition === "NIGHT" && isDay) return false;
-        return true;
-    });
-
-    let totalChance = availableWeathers.reduce((sum, w) => sum + w.chance, 0);
-    let r = Math.random() * totalChance;
-    let acc = 0;
-    for (let w of availableWeathers) {
-        acc += w.chance;
-        if (r <= acc) { currentWeather = w; break; }
-    }
-    
-    // ★ [기믹 4] 글리치 날씨는 텍스트가 깨져서 나옴
-    if(currentWeather.id === "glitch") {
-        document.getElementById("weather-display").innerHTML = `<span class="glitch-text">V̵O̵I̵D̵</span>`;
-        document.getElementById("weather-notif-name").innerHTML = `<span class="glitch-text">W̴E̵A̷T̵H̷E̵R̷: V̴O̷I̸D̴</span>`;
-    } else {
-        document.getElementById("weather-display").innerText = currentWeather.name;
-        document.getElementById("weather-notif-name").innerText = currentWeather.id.toUpperCase();
-    }
-
-    const notif = document.getElementById("weather-notification");
-    notif.classList.add("show");
-    setTimeout(() => notif.classList.remove("show"), 3500);
-
-    bgmPlayer.src = currentWeather.music || "bgms/cloudy.mp3";
-    smoothAudioTransition(currentWeather.music, currentWeather.sfx);
-    if (currentWeather.sfx) {
-        weatherSfxPlayer.src = currentWeather.sfx;
-        weatherSfxPlayer.play().catch(e=>{});
-    } else {
-        weatherSfxPlayer.pause();
-        weatherSfxPlayer.currentTime = 0;
-    }
-    
-    calcBuffs();
-
-    targetFog = (currentWeather.id === "foggy") ? 1.0 : 0.0;
-    targetSnow = (currentWeather.id === "snow") ? 1.0 : 0.0;
-    
-    if(currentWeather.id === "thunder") targetParticleCount = 1500;
-    else if(currentWeather.id === "rain") targetParticleCount = 800;
-    else if(currentWeather.id === "snow") targetParticleCount = 600;
-    else if(currentWeather.id === "wind") targetParticleCount = 100;
-    else if(currentWeather.id === "foggy") targetParticleCount = 15;
-    else if(currentWeather.id === "glitch") targetParticleCount = 1000;
-    else targetParticleCount = 0; 
-}
 
 // 💡 [신규] 자동 롤 기능 토글
 window.toggleAutoRoll = function() {
@@ -3800,6 +4261,36 @@ document.addEventListener('gesturestart', function(e) {
     e.preventDefault();
 });
 
+function initHeatwaveFilter() {
+    // 이미 필터가 있으면 삭제하고 다시 생성 (수치 적용을 위해)
+    const existing = document.getElementById("heatwave-svg-filter");
+    if (existing) existing.remove();
+
+    // ★ [수정 포인트]
+    // 1. baseFrequency="0.015 0.02": 파동을 조금 더 자잘하게 (너무 꿀렁거리지 않게)
+    // 2. scale="6": 왜곡 강도를 30 -> 6으로 대폭 하향 (살짝만 휨)
+    const svgContent = `
+    <svg style="position: absolute; width: 0; height: 0; overflow: hidden;" id="heatwave-svg-filter">
+        <defs>
+            <filter id="heatwave-filter">
+                <feTurbulence type="turbulence" baseFrequency="0.015 0.02" numOctaves="2" result="noise" id="heat-turbulence" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" />
+            </filter>
+        </defs>
+    </svg>
+    <style>
+        .heatwave-active {
+            filter: url(#heatwave-filter);
+        }
+    </style>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', svgContent);
+}
+
+// 즉시 실행
+initHeatwaveFilter();
+
 // [디버그용] 콘솔에 setWeather("thunder") 입력하면 즉시 날씨 변경
 window.setWeather = function(weatherId) {
     // weathers 배열에서 ID가 일치하는 날씨 데이터 찾기
@@ -3887,3 +4378,83 @@ window.killAllMobs = function() {
     critters.length = 0;
     console.log("💀 모든 몬스터 제거 완료.");
 };
+
+// 1. 바이옴 좌표 데이터
+const BIOME_COORDS = {
+    "south": 10000,    // 남쪽 끝
+    "snow": 37500,     // 설산 (FROZEN_MOUNTAIN)
+    "corrupt": 62500,  // 오염된 땅 (CORRUPTED)
+    "ruin": 87500,     // 고대 유적 (ANCIENT_RUIN)
+    "cliff": 112500,   // 절벽 (CLIFFS)
+    "plains": 150000,  // 평원 (스폰 지점)
+    "desert": 187500,  // 사막 (DESERT)
+    "beach": 212500,   // 해변 (BEACH)
+    "forest": 237500,  // 마법 숲 (MAGIC_FOREST)
+    "city": 262500,    // 잊혀진 도시 (FORGOTTEN_CITY)
+    "far": 287500,     // 머나먼 땅 (FAR_LANDS)
+    "north": 315000    // 북쪽 끝
+};
+
+// 2. 텔레포트 함수: window.tp("desert")
+window.tp = function(key) {
+    // 키가 없거나 잘못 입력했을 때 목록 보여주기
+    if (!key || !BIOME_COORDS[key]) {
+        console.warn("❌ 잘못된 지역 이름입니다. 아래 목록 중 하나를 쓰세요:");
+        console.table(Object.keys(BIOME_COORDS));
+        return;
+    }
+
+    const targetX = BIOME_COORDS[key];
+
+    // 1. 플레이어 위치 이동
+    player.x = targetX;
+    
+    // 2. 높이 재설정 (하늘에서 떨어지지 않게 바닥에 착지)
+    // (getGroundY 함수가 main.js에 import 되어 있어야 합니다)
+    if (typeof getGroundY === 'function') {
+        player.y = getGroundY(player.x);
+    } else {
+        player.y = H * 0.5; // 함수 없으면 그냥 중간 높이
+    }
+
+    player.vx = 0;
+    player.vy = 0;
+
+    // 3. 카메라 즉시 이동 (부드러운 이동 X, 팍! 이동)
+    cameraX = targetX - (W / 2);
+    targetCameraX = cameraX;
+
+    // 4. 주변 환경 강제 리셋 (바이옴 변경 즉시 반영)
+    if (typeof biomeMgr !== 'undefined') biomeMgr.update(player.x);
+    
+    // 5. 알림
+    console.log(`🚀 [TELEPORT] ${key.toUpperCase()} 지역으로 이동했습니다. (X: ${targetX})`);
+    
+    // (선택) 화면에 알림 띄우기
+    if (typeof showSideNotification === 'function') {
+        showSideNotification("CHEAT ACTIVATED", `Warp to ${key.toUpperCase()}`, "#00E5FF");
+    }
+};
+
+// 3. 갓 모드 함수: window.god()
+window.god = function() {
+    // 1. 체력 뻥튀기
+    player.maxHp = 9999999;
+    player.hp = 9999999;
+    
+    // 2. UI 갱신
+    if (typeof updateProfileUI === 'function') updateProfileUI();
+
+    // 3. 효과음 및 알림
+    if (typeof playSound === 'function') playSound('levelup');
+    console.log("💪 [GOD MODE] 체력이 무한대가 되었습니다.");
+
+    if (typeof showSideNotification === 'function') {
+        showSideNotification("GOD MODE", "체력 무제한 적용됨", "#FFD700");
+    }
+};
+
+// 사용법 안내 로그
+console.log("%c[개발자 치트] 사용법:", "color: #00E5FF; font-weight: bold; font-size: 14px;");
+console.log("👉 window.tp('desert') : 사막으로 이동 ('snow', 'ruin' 등 가능)");
+console.log("👉 window.god() : 체력 완전 회복 및 최대치 증가");
