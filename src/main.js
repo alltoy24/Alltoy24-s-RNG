@@ -3,6 +3,8 @@ import { gearDB, consumableDB, potionRecipes } from './data/items.js';
 import { CRITTER_DB } from './data/mobs.js';
 import { lerp, hexToRgb, distToSegment, drawStar } from './utils.js';
 import { drawPlayer, drawOtherPlayer, drawGhost } from './graphics/playerRenderer.js';
+import { renderVillages } from './graphics/villageRenderer.js'; // ★ 추가
+import { loadAssets } from './managers/assetManager.js'; // ★ 추가
 import { GRAPHICS } from './settings.js'; 
 import { 
     generateNature, 
@@ -81,6 +83,10 @@ let isAutoRolling = false;
 let autoRollTimer = null;
 let rewardShards = []; // 빨려 들어오는 조각들을 담을 배열
 let iceSpikes = [];
+// [신규] 디버그 모드 변수
+let isDebugMode = false;
+// [신규] 스폰 좌표 (평원 마을 좌표와 일치시킴)
+const SPAWN_X = 150000;
 
 // [신규] 플레이어 위치에 따른 바이옴 반환 함수
 function getPlayerBiome(x) {
@@ -127,7 +133,7 @@ const socket = io("https://rng-server.onrender.com");
 let otherPlayers = {}; // 다른 유저 데이터를 담을 공간
 
 const player = {
-    x: 150000, 
+    x: SPAWN_X,
     y: H * 0.85, 
     vx: 0, 
     vy: 0,              // 수직 속도 (추가)
@@ -2665,6 +2671,11 @@ function render() {
     renderLand(ctx, landscapes[2], 2, fogRgb, cameraX, currentParallaxY, currentFog, W, H, biomeMgr);
     renderWeatherLayer(0.4, 0.7); 
 
+    // ★ [신규] 마을 렌더링 (플레이어 뒤쪽 레이어에 배치)
+    if (typeof renderVillages === 'function') {
+        renderVillages(ctx, cameraX, currentParallaxY, W, H);
+    }
+
     // 3. 플레이어 레이어 풀 (1.0) - 땅보다 먼저 그려서 뒤로 숨김
     if (GRAPHICS.showGrass) {
         // 맨 뒤에 1.0을 넣어서 플레이어 풀만 그립니다.
@@ -2858,7 +2869,7 @@ function render() {
         if (player.deathTimer <= 0) {
             player.isDead = false;
             player.hp = 100;
-            player.x = WORLD_WIDTH / 2;
+            player.x = SPAWN_X; 
             player.y = getGroundY(player.x);
             player.vy = 0; // 부활 시 속도 초기화 추가
             player.invincibleTime = 180;
@@ -3780,6 +3791,45 @@ function render() {
     // 안개 적용 (DOM 요소 스타일 변경)
     DOM.fogOverlay.style.background = `rgba(${targetFogRgb[0]}, ${targetFogRgb[1]}, ${targetFogRgb[2]}, ${stormIntensity})`;
 
+    if (isDebugMode) {
+        const dbg = document.getElementById("debug-info");
+        if (dbg) {
+            let pBiome = getPlayerBiome(player.x);
+            // dt가 0일 때 Infinity 방지
+            let fps = dt > 0 ? Math.round(1 / dt) : 60; 
+            
+            // ★ 핵심: toFixed(1)로 소수점까지 보여줘서 실시간 갱신 확인
+            dbg.innerHTML = `
+                <span style="color:#FFD700;">━━ DEBUG INFO ━━</span><br>
+                FPS: ${fps} <br>
+                X: <span style="color:#00E5FF; font-weight:bold;">${(player.x - 150000).toFixed(1)}</span> <br>
+                Y: <span style="color:#00E5FF; font-weight:bold;">${player.y.toFixed(1)}</span> <br>
+                BIOME: ${pBiome} <br>
+                WEATHER: ${currentWeather.id} <br>
+                MOBS: ${critters.length} <br>
+                VFX: ${weatherParticles.length + projectiles.length}
+            `;
+        }
+        
+        // (선택) 히트박스 시각화
+        ctx.save();
+        ctx.lineWidth = 1;
+        
+        // 1. 몬스터 히트박스 (빨강)
+        ctx.strokeStyle = "rgba(255, 0, 0, 0.7)"; 
+        critters.forEach(c => {
+            if(c.screenX) ctx.strokeRect(c.screenX - 15, c.screenY - 60, 30, 60);
+        });
+
+        // 2. 플레이어 히트박스 (초록) - 내 위치 확인용
+        ctx.strokeStyle = "rgba(0, 255, 0, 0.7)";
+        let pScreenX = player.x - cameraX;
+        let pScreenY = player.y - currentParallaxY * 50; 
+        ctx.strokeRect(pScreenX - 12, pScreenY - 100, 24, 100);
+
+        ctx.restore();
+    }
+
     requestAnimationFrame(render); 
 }
 render();
@@ -4120,38 +4170,50 @@ window.onload = () => {
     const startBtn = document.getElementById("start-btn");
     const startScreen = document.getElementById("start-screen");
 
-    if (startBtn) {
-        // 기존 리스너 날리고 새로 생성 (중복 방지)
-        const newBtn = startBtn.cloneNode(true);
-        startBtn.parentNode.replaceChild(newBtn, startBtn);
+    // ★ [수정] 로딩 상태 표시 (선택사항)
+    startBtn.innerText = "LOADING...";
+    startBtn.disabled = true; // 로딩 중 클릭 방지
 
-        newBtn.addEventListener("click", () => {
+    // ★ [핵심] 이미지를 먼저 로딩하고 -> 완료되면 버튼 활성화
+    loadAssets(() => {
+        console.log("게임 준비 완료!");
+        startBtn.innerText = "GAME START";
+        startBtn.disabled = false;
+        startBtn.classList.add("ready"); // CSS 효과용 클래스
 
-            // (1) 오디오 재생
-            try {
-                if (bgmPlayer && bgmPlayer.paused) { 
-                    bgmPlayer.play().catch(() => {});
-                    if(weatherSfxPlayer) weatherSfxPlayer.play().catch(() => {});
+        if (startBtn) {
+            // 기존 리스너 날리고 새로 생성 (중복 방지)
+            const newBtn = startBtn.cloneNode(true);
+            startBtn.parentNode.replaceChild(newBtn, startBtn);
+
+            newBtn.addEventListener("click", () => {
+
+                // (1) 오디오 재생
+                try {
+                    if (bgmPlayer && bgmPlayer.paused) { 
+                        bgmPlayer.play().catch(() => {});
+                        if(weatherSfxPlayer) weatherSfxPlayer.play().catch(() => {});
+                    }
+                } catch(e) {}
+                
+                // (2) 전체화면
+                const docEl = document.documentElement;
+                if (docEl.requestFullscreen) docEl.requestFullscreen().catch(()=>{});
+                else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen(); 
+
+                // (3) 화면 제거
+                if (startScreen) {
+                    startScreen.style.opacity = 0;
+                    setTimeout(() => { startScreen.style.display = "none"; }, 500);
                 }
-            } catch(e) {}
-            
-            // (2) 전체화면
-            const docEl = document.documentElement;
-            if (docEl.requestFullscreen) docEl.requestFullscreen().catch(()=>{});
-            else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen(); 
-
-            // (3) 화면 제거
-            if (startScreen) {
-                startScreen.style.opacity = 0;
-                setTimeout(() => { startScreen.style.display = "none"; }, 500);
-            }
-            
-            // (4) 리사이즈
-            setTimeout(() => { if(typeof forceResize === 'function') forceResize(); }, 100);
-        });
-    } else {
-        console.error("❌ start-btn을 찾을 수 없습니다.");
-    }
+                
+                // (4) 리사이즈
+                setTimeout(() => { if(typeof forceResize === 'function') forceResize(); }, 100);
+            });
+        } else {
+            console.error("❌ start-btn을 찾을 수 없습니다.");
+        }
+    });
 
     // 2. 모바일 환경 설정
     if (IS_MOBILE) {
@@ -4312,6 +4374,13 @@ window.addEventListener('keydown', function(e) {
         e.key === '0'
     )) {
         e.preventDefault();
+    }
+
+    if (e.key === 'F3' || e.key === '`') {
+        e.preventDefault(); // 브라우저 검색창 등 방지
+        isDebugMode = !isDebugMode;
+        const dbg = document.getElementById("debug-info");
+        if (dbg) dbg.style.display = isDebugMode ? "block" : "none";
     }
 });
 
